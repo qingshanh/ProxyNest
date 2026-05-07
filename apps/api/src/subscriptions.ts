@@ -1,7 +1,9 @@
+import { TextDecoder } from 'node:util'
+import type { AppConfig } from './config'
 import type { Store } from './store'
 import { parseSubscriptionContent } from './codec'
 import type { DedupeMode, GithubDiscoveryResult, NormalizedNode, SourceEntity } from './types'
-import { runLimited, sha256, throwIfAborted, withTimeoutSignal } from './utils'
+import { newId, runLimited, sha256, throwIfAborted, withTimeoutSignal } from './utils'
 import {
   applyGithubRawProxy,
   normalizeSubscriptionUrl,
@@ -19,6 +21,7 @@ type RefreshOptions = {
   originalUrl?: string | null
   autoDeleteFailedFetches?: number | null
   discoveredBy?: string | null
+  maxNodes?: number
 }
 
 type GithubDiscoveryOptions = {
@@ -76,8 +79,17 @@ const nodePathPattern =
 const ignoredPathPattern =
   /(^|\/)(?:readme|license|package-lock|pnpm-lock|yarn.lock|docker-compose|tsconfig|vite\.config|webpack\.config)(?:\.|$)/i
 
+const formatBytes = (bytes: number): string => {
+  if (bytes >= 1024 * 1024) return `${Math.round((bytes / 1024 / 1024) * 10) / 10} MB`
+  if (bytes >= 1024) return `${Math.round((bytes / 1024) * 10) / 10} KB`
+  return `${bytes} B`
+}
+
 export class SubscriptionService {
-  constructor(private readonly store: Store) {}
+  constructor(
+    private readonly store: Store,
+    private readonly config: AppConfig
+  ) {}
 
   async addBatch(items: BatchItem[], dedupeMode: DedupeMode): Promise<{
     created: number
@@ -95,12 +107,24 @@ export class SubscriptionService {
     const dedupedBefore = this.dedupeSources()
     const types: Record<string, number> = {}
     const failed: Array<{ url: string; error: string }> = []
+    if (items.length > this.config.subscriptionMaxBatchItems) {
+      throw new Error(`订阅批量导入数量超过上限 ${this.config.subscriptionMaxBatchItems} 条`)
+    }
     for (const item of items) {
       const normalized = this.normalizeInputUrl(item.url)
+      if (rawNodes >= this.config.subscriptionMaxNodesPerBatch) {
+        failed.push({
+          url: normalized.url,
+          error: `批量导入节点数量已达到上限 ${this.config.subscriptionMaxNodesPerBatch} 个`
+        })
+        continue
+      }
       try {
+        const remainingNodes = Math.max(1, this.config.subscriptionMaxNodesPerBatch - rawNodes)
         const source = await this.refreshUrl(normalized.url, item.name, {
           originalUrl: normalized.originalUrl,
-          autoDeleteFailedFetches: item.autoDeleteFailedFetches
+          autoDeleteFailedFetches: item.autoDeleteFailedFetches,
+          maxNodes: remainingNodes
         })
         created += 1
         rawNodes += source.nodeCount
@@ -274,12 +298,20 @@ export class SubscriptionService {
     options: RefreshOptions = {},
     signal?: AbortSignal
   ): Promise<SourceEntity> {
-    let sourceId = this.store.getSourceByUrl(url)?.id ?? 'sub_pending'
+    const sourceId = this.store.getSourceByUrl(url)?.id ?? newId('sub')
     try {
       const text = await this.fetchText(url, 20000, {}, signal)
-      const parsed = parseSubscriptionContent(text, sourceId)
+      const maxNodes = Math.min(
+        this.config.subscriptionMaxNodesPerSource,
+        options.maxNodes ?? this.config.subscriptionMaxNodesPerSource
+      )
+      const parsed = parseSubscriptionContent(text, sourceId, { maxNodes })
+      if (parsed.truncated) {
+        throw new Error(`订阅节点数量超过上限 ${maxNodes} 个，请拆分订阅或调高 SUBSCRIPTION_MAX_NODES_PER_SOURCE / SUBSCRIPTION_MAX_NODES_PER_BATCH`)
+      }
       if (!parsed.nodes.length) {
         const source = this.store.upsertSource({
+          id: sourceId,
           name: name ?? null,
           url,
           originalUrl: options.originalUrl,
@@ -295,6 +327,7 @@ export class SubscriptionService {
         throw new Error(source.lastError || 'no supported nodes found')
       }
       const source = this.store.upsertSource({
+        id: sourceId,
         name: name ?? null,
         url,
         originalUrl: options.originalUrl,
@@ -306,13 +339,12 @@ export class SubscriptionService {
         discoveredBy: options.discoveredBy,
         contentSignature: this.contentSignature(parsed.nodes)
       })
-      sourceId = source.id
-      const reparsed = parseSubscriptionContent(text, sourceId)
-      this.store.upsertNodes(source.id, reparsed.nodes)
+      this.store.upsertNodes(source.id, parsed.nodes)
       return this.store.getSource(source.id)!
     } catch (error) {
       if (error instanceof Error && error.message === 'no supported nodes found') throw error
       const source = this.store.upsertSource({
+        id: sourceId,
         name: name ?? null,
         url,
         originalUrl: options.originalUrl,
@@ -344,7 +376,35 @@ export class SubscriptionService {
       signal: withTimeoutSignal(timeoutMs, signal)
     })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    return response.text()
+    const maxBytes = this.config.subscriptionMaxBytes
+    const lengthHeader = response.headers.get('content-length')
+    const declaredLength = lengthHeader ? Number.parseInt(lengthHeader, 10) : 0
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+      throw new Error(`订阅文件过大：${formatBytes(declaredLength)}，上限 ${formatBytes(maxBytes)}`)
+    }
+    if (!response.body) {
+      const text = await response.text()
+      const bytes = Buffer.byteLength(text, 'utf8')
+      if (bytes > maxBytes) throw new Error(`订阅文件过大：${formatBytes(bytes)}，上限 ${formatBytes(maxBytes)}`)
+      return text
+    }
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let received = 0
+    let text = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+      received += value.byteLength
+      if (received > maxBytes) {
+        await reader.cancel().catch(() => undefined)
+        throw new Error(`订阅文件过大：超过 ${formatBytes(maxBytes)} 上限`)
+      }
+      text += decoder.decode(value, { stream: true })
+    }
+    text += decoder.decode()
+    return text
   }
 
   private discoveryOptions(input: Partial<GithubDiscoveryOptions>): GithubDiscoveryOptions {
@@ -461,7 +521,7 @@ export class SubscriptionService {
       const proxied = applyGithubRawProxy(rawUrl, proxyPrefix)
       try {
         const text = await this.fetchText(proxied, 15000, {}, signal)
-        const parsed = parseSubscriptionContent(text, 'github_probe')
+        const parsed = parseSubscriptionContent(text, 'github_probe', { maxNodes: 1 })
         if (parsed.nodes.length > 0) valid.push(rawUrl)
       } catch {
         throwIfAborted(signal)

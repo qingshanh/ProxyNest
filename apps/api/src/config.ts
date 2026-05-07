@@ -13,6 +13,11 @@ const int = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+const positiveInt = (value: string | undefined, fallback: number): number => {
+  const parsed = int(value, fallback)
+  return parsed > 0 ? parsed : fallback
+}
+
 const resolveAppPath = (value: string | undefined, fallback: string): string => {
   const target = value || fallback
   return path.isAbsolute(target) ? target : path.resolve(appRoot, target)
@@ -60,6 +65,11 @@ export type AppConfig = {
   telegramApiBaseUrl: string
   githubToken: string
   githubRawProxyPrefix: string
+  httpBodyLimitBytes: number
+  subscriptionMaxBatchItems: number
+  subscriptionMaxBytes: number
+  subscriptionMaxNodesPerSource: number
+  subscriptionMaxNodesPerBatch: number
 }
 
 export const loadConfig = (): AppConfig => {
@@ -90,6 +100,11 @@ export const loadConfig = (): AppConfig => {
     telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
     telegramApiBaseUrl: process.env.TELEGRAM_API_BASE_URL || 'https://api.telegram.org',
     githubToken: process.env.GITHUB_TOKEN || '',
-    githubRawProxyPrefix: process.env.GITHUB_RAW_PROXY_PREFIX || ''
+    githubRawProxyPrefix: process.env.GITHUB_RAW_PROXY_PREFIX || '',
+    httpBodyLimitBytes: positiveInt(process.env.HTTP_BODY_LIMIT_BYTES, 4 * 1024 * 1024),
+    subscriptionMaxBatchItems: positiveInt(process.env.SUBSCRIPTION_MAX_BATCH_ITEMS, 200),
+    subscriptionMaxBytes: positiveInt(process.env.SUBSCRIPTION_MAX_BYTES, 8 * 1024 * 1024),
+    subscriptionMaxNodesPerSource: positiveInt(process.env.SUBSCRIPTION_MAX_NODES_PER_SOURCE, 20000),
+    subscriptionMaxNodesPerBatch: positiveInt(process.env.SUBSCRIPTION_MAX_NODES_PER_BATCH, 50000)
   }
 }

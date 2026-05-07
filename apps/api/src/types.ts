@@ -302,6 +302,7 @@ export type ParseResult = {
   format: SubscriptionFormat
   nodes: NormalizedNode[]
   typeSummary: Record<string, number>
+  truncated?: boolean
 }
 
 export type GithubDiscoveryResult = {

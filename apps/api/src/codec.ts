@@ -14,11 +14,30 @@ const protocolAliases: Record<string, ProxyProtocol> = {
   tuic: 'tuic'
 }
 
-export const parseSubscriptionContent = (content: string, sourceId: string): ParseResult => {
+type ParseOptions = {
+  maxNodes?: number
+}
+
+type CandidateResult = {
+  items: string[]
+  truncated: boolean
+}
+
+type NodeListResult = {
+  nodes: NormalizedNode[]
+  truncated: boolean
+}
+
+export const parseSubscriptionContent = (content: string, sourceId: string, options: ParseOptions = {}): ParseResult => {
+  const maxNodes = Math.max(1, Math.floor(options.maxNodes ?? Number.MAX_SAFE_INTEGER))
   const normalized = content.trim()
-  const yamlNodes = parseClashYaml(normalized, sourceId)
-  const textCandidates = collectTextCandidates(normalized)
-  const uriNodes = textCandidates.flatMap((line) => {
+  const yamlResult = parseClashYaml(normalized, sourceId, maxNodes)
+  const yamlNodes = yamlResult.nodes
+  const remaining = Math.max(0, maxNodes - yamlNodes.length)
+  const textCandidates = remaining > 0
+    ? collectTextCandidates(normalized, remaining)
+    : { items: [], truncated: true }
+  const uriNodes = textCandidates.items.flatMap((line) => {
     const parsed = parseUriNode(line, sourceId)
     return parsed ? [parsed] : []
   })
@@ -30,7 +49,8 @@ export const parseSubscriptionContent = (content: string, sourceId: string): Par
   return {
     format: yamlNodes.length && uriNodes.length ? 'mixed' : yamlNodes.length ? 'clash' : uriNodes.length ? 'v2ray' : 'unknown',
     nodes,
-    typeSummary
+    typeSummary,
+    truncated: yamlResult.truncated || textCandidates.truncated
   }
 }
 
@@ -82,56 +102,64 @@ export const toClashProxy = (node: NodeEntity | NormalizedNode): Record<string, 
   }
 }
 
-const parseClashYaml = (content: string, sourceId: string): NormalizedNode[] => {
+const parseClashYaml = (content: string, sourceId: string, maxNodes: number): NodeListResult => {
+  if (!/^\s*proxies\s*:|[\r\n]\s*proxies\s*:/i.test(content)) return { nodes: [], truncated: false }
   try {
     const doc = YAML.parse(content) as { proxies?: unknown }
-    if (!doc || !Array.isArray(doc.proxies)) return []
-    return doc.proxies.flatMap((proxy) => {
-      if (!proxy || typeof proxy !== 'object') return []
+    if (!doc || !Array.isArray(doc.proxies)) return { nodes: [], truncated: false }
+    const nodes: NormalizedNode[] = []
+    for (const proxy of doc.proxies) {
+      if (nodes.length >= maxNodes) return { nodes, truncated: true }
+      if (!proxy || typeof proxy !== 'object') continue
       const item = proxy as Record<string, unknown>
       const protocol = protocolAliases[String(item.type || '').toLowerCase()] ?? 'unknown'
       const server = item.server ? String(item.server) : ''
       const port = Number(item.port || 0)
-      if (!server || !port) return []
+      if (!server || !port) continue
       const name = String(item.name || `${server}:${port}`)
       const clash = { ...item, name }
       const fingerprint = fingerprintConfig(protocol, clash)
-      return [
-        {
-          id: newId('node'),
-          fingerprint,
-          protocol,
-          originalName: name,
-          displayName: name,
-          server,
-          port,
-          clash,
-          sourceIds: [sourceId]
-        }
-      ]
-    })
+      nodes.push({
+        id: newId('node'),
+        fingerprint,
+        protocol,
+        originalName: name,
+        displayName: name,
+        server,
+        port,
+        clash,
+        sourceIds: [sourceId]
+      })
+    }
+    return { nodes, truncated: false }
   } catch {
-    return []
+    return { nodes: [], truncated: false }
   }
 }
 
-const collectTextCandidates = (content: string): string[] => {
+const collectTextCandidates = (content: string, maxItems: number): CandidateResult => {
   const candidates = new Set<string>()
+  let truncated = false
   const addLines = (value: string) => {
-    value
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .forEach((line) => {
-        if (/^(vmess|vless|trojan|ss|hysteria2|hy2|tuic):\/\//i.test(line)) {
-          candidates.add(line)
+    for (const rawLine of value.split(/\r?\n/)) {
+      const line = rawLine.trim()
+      if (!line) continue
+      if (/^(vmess|vless|trojan|ss|hysteria2|hy2|tuic):\/\//i.test(line)) {
+        candidates.add(line)
+        if (candidates.size > maxItems) {
+          truncated = true
+          break
         }
-      })
+      }
+    }
   }
   addLines(content)
-  const decoded = tryDecodeBase64(content)
-  if (decoded) addLines(decoded)
-  return [...candidates]
+  if (!truncated && shouldTryDecodeBase64Subscription(content)) {
+    const decoded = tryDecodeBase64(content)
+    if (decoded) addLines(decoded)
+  }
+  const items = [...candidates]
+  return { items: items.slice(0, maxItems), truncated: truncated || items.length > maxItems }
 }
 
 const parseUriNode = (uri: string, sourceId: string): NormalizedNode | null => {
@@ -306,6 +334,12 @@ const tryDecodeBase64 = (value: string): string | null => {
   } catch {
     return null
   }
+}
+
+const shouldTryDecodeBase64Subscription = (value: string): boolean => {
+  if (value.includes('://')) return false
+  const compact = value.replace(/\s+/g, '')
+  return compact.length >= 16 && /^[A-Za-z0-9+/_=-]+$/.test(compact)
 }
 
 const mergeParsedNodes = (nodes: NormalizedNode[]): NormalizedNode[] => {

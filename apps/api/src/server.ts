@@ -129,7 +129,7 @@ const main = async (): Promise<void> => {
   const store = new Store(db, config)
   await store.bootstrap()
 
-  const subscriptions = new SubscriptionService(store)
+  const subscriptions = new SubscriptionService(store, config)
   const artifacts = new ArtifactService(store, config)
   const telegram = new TelegramService(store)
   const geoip = new GeoIpService(config)
@@ -137,7 +137,8 @@ const main = async (): Promise<void> => {
   const tasks = new TaskQueue({ store, subscriptions, artifacts, telegram, geoip, probe })
 
   const app = Fastify({
-    logger: true
+    logger: true,
+    bodyLimit: config.httpBodyLimitBytes
   })
   let scheduledTasks: ScheduledTask[] = []
   const runGeoIpUpdate = async (): Promise<{ updatedAt: string; bytes?: number; error?: string }> => {
@@ -345,11 +346,11 @@ const main = async (): Promise<void> => {
     const schema = z.object({
       items: z.array(
         z.object({
-          name: z.string().optional(),
-          url: z.string().url(),
+          name: z.string().max(200).optional(),
+          url: z.string().url().max(4096),
           autoDeleteFailedFetches: z.number().int().min(0).nullable().optional()
         })
-      ).min(1),
+      ).min(1).max(config.subscriptionMaxBatchItems),
       dedupeMode: z.enum(['strict_uri', 'normalized_config', 'endpoint', 'exit_ip_after_alive']).default('endpoint')
     })
     const body = schema.parse(request.body)
