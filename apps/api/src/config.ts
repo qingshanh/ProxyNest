@@ -24,6 +24,20 @@ const resolveOptionalAppPath = (value: string | undefined): string => {
   return path.isAbsolute(trimmed) ? trimmed : path.resolve(appRoot, trimmed)
 }
 
+const mihomoCandidateNames = (): string[] => {
+  return process.platform === 'win32' ? ['mihomo.exe', 'mihomo'] : ['mihomo', 'mihomo.exe']
+}
+
+const resolveMihomoBin = (value: string | undefined): string => {
+  const configured = resolveOptionalAppPath(value)
+  if (configured && fs.existsSync(configured)) return configured
+  for (const name of mihomoCandidateNames()) {
+    const candidate = path.resolve(appRoot, name)
+    if (fs.existsSync(candidate)) return candidate
+  }
+  return configured
+}
+
 export type AppConfig = {
   host: string
   port: number
@@ -67,7 +81,7 @@ export const loadConfig = (): AppConfig => {
     adminPassword: process.env.ADMIN_PASSWORD || 'change-me-before-start',
     cookieSecret: process.env.COOKIE_SECRET || 'change-me-to-a-long-random-string',
     sessionTtlDays: int(process.env.SESSION_TTL_DAYS, 30),
-    mihomoBin: resolveOptionalAppPath(process.env.MIHOMO_BIN),
+    mihomoBin: resolveMihomoBin(process.env.MIHOMO_BIN),
     mihomoApiSecret: process.env.MIHOMO_API_SECRET || 'proxynest',
     mihomoBasePort: int(process.env.MIHOMO_BASE_PORT, 17890),
     mihomoBaseControllerPort: int(process.env.MIHOMO_BASE_CONTROLLER_PORT, 17990),

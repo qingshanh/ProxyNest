@@ -11,3 +11,6 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/app/data
+      # Linux VPS 使用 Docker 时，根目录的 mihomo 需要挂进容器。
+      # 确认本地存在 ./mihomo 且已 chmod +x 后取消下一行注释。
+      # - ./mihomo:/app/mihomo:ro

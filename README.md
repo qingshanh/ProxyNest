@@ -77,10 +77,23 @@ http://127.0.0.1:5173
 
 真实测活、测速、解锁需要配置 Mihomo。不配置 `MIHOMO_BIN` 时服务仍可启动，但测速和解锁会提示需要 Mihomo，测活只能使用 TCP 兜底。
 
-把 `mihomo.exe` 放在项目根目录时可配置：
+Windows 把 `mihomo.exe` 放在项目根目录时可配置：
 
 ```text
 MIHOMO_BIN=./mihomo.exe
+MIHOMO_API_SECRET=proxynest
+MIHOMO_BASE_PORT=17890
+MIHOMO_BASE_CONTROLLER_PORT=17990
+```
+
+Linux/VPS 把 `mihomo` 放在项目根目录时可配置：
+
+```bash
+chmod +x ./mihomo
+```
+
+```text
+MIHOMO_BIN=./mihomo
 MIHOMO_API_SECRET=proxynest
 MIHOMO_BASE_PORT=17890
 MIHOMO_BASE_CONTROLLER_PORT=17990
@@ -93,6 +106,22 @@ MIHOMO_BIN=D:\tools\mihomo.exe
 ```
 
 设置页会显示 Mihomo 路径是否存在。改 `.env` 后需要重启后端。
+
+Docker 部署时，项目根目录的 `mihomo` 不会自动进入运行容器，需要挂载到 `/app/mihomo`：
+
+```yaml
+volumes:
+  - ./data:/app/data
+  - ./mihomo:/app/mihomo:ro
+```
+
+然后设置：
+
+```text
+MIHOMO_BIN=/app/mihomo
+```
+
+如果面板仍显示 `/app/mihomo.exe`，说明容器仍在使用旧环境变量或旧镜像，请确认 VPS 上的 `.env`、`docker compose config` 输出和容器重建结果。
 
 ## Telegram
 

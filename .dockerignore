@@ -8,6 +8,7 @@ data
 logs
 *.log
 mihomo.exe
+mihomo
 mihomo-*.zip
 *.mmdb
 .git
