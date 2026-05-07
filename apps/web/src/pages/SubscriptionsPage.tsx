@@ -156,21 +156,33 @@ export function SubscriptionsPage() {
     return ok
   }
 
-  const handleCopyUrl = async (source: SourceEntity) => {
+  const writeClipboard = async (text: string) => {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(source.url)
-      } else if (!copyBySelection(source.url)) {
+        await navigator.clipboard.writeText(text)
+      } else if (!copyBySelection(text)) {
         throw new Error('copy failed')
       }
-      setCopiedSourceId(source.id)
-      setTimeout(() => setCopiedSourceId(null), 1600)
     } catch {
-      if (copyBySelection(source.url)) {
-        setCopiedSourceId(source.id)
-        setTimeout(() => setCopiedSourceId(null), 1600)
-      }
+      copyBySelection(text)
     }
+  }
+
+  const flashCopied = (id: string) => {
+    setCopiedSourceId(id)
+    setTimeout(() => setCopiedSourceId(null), 1600)
+  }
+
+  const handleCopyUrl = async (source: SourceEntity) => {
+    await writeClipboard(source.url)
+    flashCopied(source.id)
+  }
+
+  const handleCopyAllUrls = async () => {
+    const urls = sources.map((source) => source.url).filter(Boolean)
+    if (!urls.length) return
+    await writeClipboard(urls.join('\n'))
+    flashCopied('__all__')
   }
 
   const dedupeLabels: Record<DedupeMode, string> = {
@@ -200,6 +212,12 @@ export function SubscriptionsPage() {
           订阅管理
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {sources.length > 0 && (
+            <button className="btn btn-primary" onClick={handleCopyAllUrls}>
+              复制全部订阅
+              {copiedSourceId === '__all__' && <span style={{ marginLeft: 6 }}>copied</span>}
+            </button>
+          )}
           <button className="btn btn-ghost" onClick={handleDiscover} disabled={discovering}>
             {discovering ? '搜索中...' : 'GitHub 发现'}
           </button>

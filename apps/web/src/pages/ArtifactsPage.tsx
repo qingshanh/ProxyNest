@@ -36,22 +36,37 @@ export function ArtifactsPage() {
     return ok
   }
 
-  const copyText = async (artifact: ArtifactEntity) => {
+  const writeClipboard = async (text: string) => {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(artifact.url)
-      } else if (!copyBySelection(artifact.url)) {
+        await navigator.clipboard.writeText(text)
+      } else if (!copyBySelection(text)) {
         throw new Error('copy failed')
       }
     } catch {
-      copyBySelection(artifact.url)
+      copyBySelection(text)
     }
-    setCopiedKey(artifact.key)
-    setToast('copied')
+  }
+
+  const flashCopied = (key: string, message = 'copied') => {
+    setCopiedKey(key)
+    setToast(message)
     setTimeout(() => {
       setToast(null)
       setCopiedKey(null)
     }, 1600)
+  }
+
+  const copyText = async (artifact: ArtifactEntity) => {
+    await writeClipboard(artifact.url)
+    flashCopied(artifact.key)
+  }
+
+  const copyAll = async () => {
+    const urls = artifacts.map((artifact) => artifact.url).filter(Boolean)
+    if (!urls.length) return
+    await writeClipboard(urls.join('\n'))
+    flashCopied('__all__', `已复制 ${urls.length} 条订阅`)
   }
 
   const handleRegenerateToken = async () => {
@@ -83,6 +98,12 @@ export function ArtifactsPage() {
           订阅
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {artifacts.length > 0 && (
+            <button className="btn btn-primary btn-sm" onClick={copyAll}>
+              复制全部订阅
+              {copiedKey === '__all__' && <span style={{ marginLeft: 6 }}>copied</span>}
+            </button>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={fetch}>刷新</button>
           <button className="btn btn-danger btn-sm" onClick={handleRegenerateToken}>重置订阅 Token</button>
         </div>

@@ -238,6 +238,51 @@ server {
 }
 ```
 
+## 备份迁移
+
+建议至少备份 `.env` 和 `data/` 目录。数据库里保存订阅源、节点、任务历史、设置、订阅 token、Telegram/GitHub 配置等核心数据；`.env` 保存启动端口、数据库路径、Mihomo 路径、初始环境变量等运行配置。
+
+默认数据库路径是：
+
+```text
+data/proxynest.db
+```
+
+如果是旧版本升级，可能仍在使用：
+
+```text
+data/bestsub.db
+```
+
+最稳妥的迁移方式：
+
+```bash
+# 1. 在旧机器停止服务，避免复制 SQLite 时仍在写入
+docker compose down
+# 或者停止你的 npm/pm2/systemd 服务
+
+# 2. 备份配置和数据
+tar -czf proxynest-backup.tar.gz .env data
+
+# 3. 在新机器解压到项目根目录
+tar -xzf proxynest-backup.tar.gz
+
+# 4. 启动服务
+docker compose up -d --build
+```
+
+如果不能停服务，复制 SQLite 数据库时要同时带上可能存在的 WAL 文件：
+
+```text
+data/proxynest.db
+data/proxynest.db-wal
+data/proxynest.db-shm
+```
+
+旧库同理是 `data/bestsub.db*`。不过更推荐短暂停服务后整体备份 `data/`，这样订阅产物、GeoIP 本地库、临时状态也一起保留。
+
+`node_modules/`、`apps/*/dist/` 不需要备份，可以重新安装和构建。`mihomo`/`mihomo.exe` 如果是手动放在项目根目录，也需要在新机器重新放置并确认 `.env` 的 `MIHOMO_BIN` 指向正确路径。
+
 ## 常用命令
 
 ```bash
