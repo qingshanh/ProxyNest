@@ -544,7 +544,7 @@ export class Store {
         `INSERT INTO subscription_sources
          (id, name, url, original_url, enabled, valid, last_fetch_at, last_error, last_success_at,
           failed_fetch_count, auto_delete_failed_fetches, discovered_by, content_signature, node_count, type_summary_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           input.name ?? null,
