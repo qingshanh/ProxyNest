@@ -1,0 +1,13 @@
+services:
+  proxynest-api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: proxynest-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data

@@ -1,0 +1,24 @@
+{
+  "name": "proxynest",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm --workspace apps/api run dev",
+    "dev:web": "npm --workspace apps/web run dev",
+    "build": "npm --workspace apps/api run build",
+    "build:web": "npm --workspace apps/web run build",
+    "build:all": "npm run build && npm run build:web",
+    "start": "npm --workspace apps/api run start",
+    "typecheck": "npm --workspace apps/api run typecheck",
+    "typecheck:web": "npm --workspace apps/web run typecheck",
+    "typecheck:all": "npm run typecheck && npm run typecheck:web"
+  },
+  "engines": {
+    "node": ">=18.20.0"
+  },
+  "dependencies": {}
+}

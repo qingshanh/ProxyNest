@@ -1,0 +1,14 @@
+node_modules
+apps/*/dist
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+data
+logs
+*.log
+mihomo.exe
+mihomo-*.zip
+*.mmdb
+.git
+.gitignore
