@@ -213,6 +213,7 @@ export function Layout() {
 
         @media (max-width: 768px) {
           aside { transform: translateX(-100%); }
+          .main-content { margin-left: 0 !important; padding: 20px 16px !important; }
         }
       `}</style>
 
@@ -240,7 +241,7 @@ export function Layout() {
       `}</style>
 
       {/* Main content */}
-      <main style={{ flex: 1, marginLeft: 240, padding: '28px 36px', minWidth: 0 }}>
+      <main className="main-content" style={{ flex: 1, marginLeft: 240, padding: '28px 36px', minWidth: 0 }}>
         <Outlet />
       </main>
     </div>

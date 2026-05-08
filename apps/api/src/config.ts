@@ -64,6 +64,7 @@ export type AppConfig = {
   telegramChatId: string
   telegramApiBaseUrl: string
   githubToken: string
+  githubApiBaseUrl: string
   githubRawProxyPrefix: string
   httpBodyLimitBytes: number
   subscriptionMaxBatchItems: number
@@ -100,6 +101,7 @@ export const loadConfig = (): AppConfig => {
     telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
     telegramApiBaseUrl: process.env.TELEGRAM_API_BASE_URL || 'https://api.telegram.org',
     githubToken: process.env.GITHUB_TOKEN || '',
+    githubApiBaseUrl: process.env.GITHUB_API_BASE_URL || 'https://api.github.com',
     githubRawProxyPrefix: process.env.GITHUB_RAW_PROXY_PREFIX || '',
     httpBodyLimitBytes: positiveInt(process.env.HTTP_BODY_LIMIT_BYTES, 4 * 1024 * 1024),
     subscriptionMaxBatchItems: positiveInt(process.env.SUBSCRIPTION_MAX_BATCH_ITEMS, 200),

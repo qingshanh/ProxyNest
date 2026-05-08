@@ -245,7 +245,7 @@ export class Store {
       },
       github: {
         rawProxyPrefix: this.config.githubRawProxyPrefix,
-        apiBaseUrl: 'https://api.github.com',
+        apiBaseUrl: this.config.githubApiBaseUrl || 'https://api.github.com',
         token: this.config.githubToken,
         tokenSet: Boolean(this.config.githubToken),
         discovery: {
@@ -399,22 +399,40 @@ export class Store {
     const next = deepMerge(current as unknown as Record<string, unknown>, patch) as unknown as AppSettings
     if (patch.telegram && typeof patch.telegram === 'object') {
       const telegramPatch = patch.telegram as Record<string, unknown>
-      if (!('botToken' in telegramPatch)) {
+      if (!('botToken' in telegramPatch) || telegramPatch.botToken == null || telegramPatch.botToken === '') {
         next.telegram.botToken = current.telegram.botToken
       }
       next.telegram.botTokenSet = Boolean(next.telegram.botToken)
     }
     if (patch.github && typeof patch.github === 'object') {
       const githubPatch = patch.github as Record<string, unknown>
-      if (!('token' in githubPatch)) {
+      if (!('token' in githubPatch) || githubPatch.token == null || githubPatch.token === '') {
         next.github.token = current.github.token
       }
+      next.github.apiBaseUrl = this.cleanUrl(next.github.apiBaseUrl, 'https://api.github.com')
+      next.github.rawProxyPrefix = this.cleanUrl(next.github.rawProxyPrefix, '')
+      next.github.discovery.searchDays = this.clampInt(next.github.discovery.searchDays, 1, 365, current.github.discovery.searchDays)
+      next.github.discovery.maxRepos = this.clampInt(next.github.discovery.maxRepos, 1, 500, current.github.discovery.maxRepos)
+      next.github.discovery.maxCandidates = this.clampInt(next.github.discovery.maxCandidates, 1, 1000, current.github.discovery.maxCandidates)
+      next.github.discovery.maxAdditions = this.clampInt(next.github.discovery.maxAdditions, 1, 500, current.github.discovery.maxAdditions)
+      next.github.discovery.concurrency = this.clampInt(next.github.discovery.concurrency, 1, 20, current.github.discovery.concurrency)
       next.github.tokenSet = Boolean(next.github.token)
     }
     this.saveSettings(next)
     return next
   }
 
+  private cleanUrl(value: unknown, fallback: string): string {
+    const trimmed = String(value ?? '').trim()
+    if (!trimmed) return fallback
+    return trimmed.replace(/\/+$/, '')
+  }
+
+  private clampInt(value: unknown, min: number, max: number, fallback: number): number {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) return fallback
+    return Math.min(max, Math.max(min, Math.floor(parsed)))
+  }
   regenerateSubToken(): string {
     const settings = this.getSettings()
     settings.subToken = randomToken()

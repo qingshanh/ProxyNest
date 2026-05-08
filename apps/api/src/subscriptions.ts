@@ -235,14 +235,20 @@ export class SubscriptionService {
     const proxyPrefix = settings.github.rawProxyPrefix
     const sourceDedupe = this.dedupeSources(proxyPrefix)
     const existingRawUrls = this.existingRawUrlSet(proxyPrefix)
-    const candidates = await this.collectGithubRawUrls(options, signal)
+    const failed: Array<{ url: string; error: string }> = []
+    let candidates: string[] = []
+    try {
+      candidates = await this.collectGithubRawUrls(options, signal)
+    } catch (error) {
+      throwIfAborted(signal)
+      failed.push({ url: this.githubApiBaseUrl(), error: error instanceof Error ? error.message : String(error) })
+    }
     const freshCandidates = candidates.filter((url) => !existingRawUrls.has(url))
     const limitedCandidates = freshCandidates.slice(0, options.maxCandidates)
     const validated = options.validateCandidates
       ? await this.validateGithubCandidates(limitedCandidates, proxyPrefix, options.concurrency, signal)
       : limitedCandidates
     const toAdd = validated.slice(0, options.maxAdditions)
-    const failed: Array<{ url: string; error: string }> = []
     const sources: SourceEntity[] = []
 
     for (const rawUrl of toAdd) {
@@ -365,7 +371,8 @@ export class SubscriptionService {
     url: string,
     timeoutMs: number,
     headers: Record<string, string> = {},
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    maxBytes = this.config.subscriptionMaxBytes
   ): Promise<string> {
     throwIfAborted(signal)
     const response = await fetch(url, {
@@ -375,17 +382,23 @@ export class SubscriptionService {
       },
       signal: withTimeoutSignal(timeoutMs, signal)
     })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const maxBytes = this.config.subscriptionMaxBytes
+    if (!response.ok) {
+      const detail = await this.readResponseText(response, Math.min(maxBytes, 64 * 1024)).catch(() => '')
+      throw new Error(this.httpErrorMessage(response.status, detail))
+    }
     const lengthHeader = response.headers.get('content-length')
     const declaredLength = lengthHeader ? Number.parseInt(lengthHeader, 10) : 0
     if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
       throw new Error(`订阅文件过大：${formatBytes(declaredLength)}，上限 ${formatBytes(maxBytes)}`)
     }
+    return this.readResponseText(response, maxBytes)
+  }
+
+  private async readResponseText(response: Response, maxBytes: number): Promise<string> {
     if (!response.body) {
       const text = await response.text()
       const bytes = Buffer.byteLength(text, 'utf8')
-      if (bytes > maxBytes) throw new Error(`订阅文件过大：${formatBytes(bytes)}，上限 ${formatBytes(maxBytes)}`)
+      if (bytes > maxBytes) throw new Error(`响应内容过大：${formatBytes(bytes)}，上限 ${formatBytes(maxBytes)}`)
       return text
     }
     const reader = response.body.getReader()
@@ -399,12 +412,25 @@ export class SubscriptionService {
       received += value.byteLength
       if (received > maxBytes) {
         await reader.cancel().catch(() => undefined)
-        throw new Error(`订阅文件过大：超过 ${formatBytes(maxBytes)} 上限`)
+        throw new Error(`响应内容过大：超过 ${formatBytes(maxBytes)} 上限`)
       }
       text += decoder.decode(value, { stream: true })
     }
     text += decoder.decode()
     return text
+  }
+
+  private httpErrorMessage(status: number, detail: string): string {
+    const trimmed = detail.trim()
+    if (!trimmed) return `HTTP ${status}`
+    try {
+      const json = JSON.parse(trimmed) as { message?: string; documentation_url?: string }
+      const message = json.message ? `: ${json.message}` : ''
+      const docs = json.documentation_url ? ` (${json.documentation_url})` : ''
+      return `HTTP ${status}${message}${docs}`
+    } catch {
+      return `HTTP ${status}: ${trimmed.slice(0, 300)}`
+    }
   }
 
   private discoveryOptions(input: Partial<GithubDiscoveryOptions>): GithubDiscoveryOptions {
@@ -640,7 +666,7 @@ export class SubscriptionService {
   }
 
   private githubApiBaseUrl(): string {
-    return this.store.getSettings().github.apiBaseUrl.replace(/\/+$/, '')
+    return (this.store.getSettings().github.apiBaseUrl || 'https://api.github.com').trim().replace(/\/+$/, '') || 'https://api.github.com'
   }
 
   private async fetchGithubJson<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -649,7 +675,7 @@ export class SubscriptionService {
       Accept: 'application/vnd.github+json'
     }
     if (settings.github.token) headers.Authorization = `Bearer ${settings.github.token}`
-    const text = await this.fetchText(url, 15000, headers, signal)
+    const text = await this.fetchText(url, 15000, headers, signal, Math.max(this.config.subscriptionMaxBytes, 16 * 1024 * 1024))
     return JSON.parse(text) as T
   }
 }

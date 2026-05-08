@@ -441,8 +441,20 @@ td { transition: background var(--transition); }
 @media (max-width: 768px) {
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   .form-row { flex-direction: column; align-items: stretch; }
-  .modal { min-width: auto; width: 95vw; }
+  .form-row > button { width: 100%; justify-content: center; }
+  .form-row > .btn { width: 100%; justify-content: center; }
+  .modal { min-width: auto; width: 95vw; padding: 20px; }
   .card { padding: 16px; }
-  .stat-card { padding: 16px 18px; }
+  .card-header { flex-wrap: wrap; gap: 8px; }
+  .stat-card { padding: 14px 16px; }
   .stat-card .stat-value { font-size: 1.5em; }
+  .stat-card .stat-icon { width: 36px; height: 36px; right: 12px; top: 14px; }
+  .section-title { font-size: 1.2em; margin-bottom: 16px; }
+  .toast { left: 16px; right: 16px; top: 12px; font-size: .85em; padding: 10px 16px; }
+  .btn { font-size: .85em; padding: 8px 14px; }
+  .btn-sm { padding: 5px 10px; font-size: .8em; }
+  table { font-size: .85em; }
+  th, td { padding: 8px 10px; white-space: nowrap; }
+  .page-title-icon { width: 30px; height: 30px; margin-right: 6px; }
+  .alert { font-size: .82em; padding: 10px 14px; }
 }

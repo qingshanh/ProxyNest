@@ -42,7 +42,7 @@ export function LoginPage() {
       }} />
 
       <div style={{
-        width: 400, position: 'relative', zIndex: 1
+        width: '100%', maxWidth: 400, position: 'relative', zIndex: 1, padding: '0 16px'
       }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
@@ -63,10 +63,11 @@ export function LoginPage() {
         </div>
 
         {/* Login card */}
-        <div style={{
+        <div className="login-card" style={{
           background: 'var(--c-surface)', border: '1px solid var(--c-border)',
           borderRadius: 14, padding: '28px 32px', boxShadow: '0 10px 40px rgba(0,0,0,.06)'
         }}>
+          <style>{`@media (max-width: 768px) { .login-card { padding: 20px 18px !important; } }`}</style>
           <form onSubmit={handleSubmit}>
             {error && (
               <div className="alert alert-error" style={{ marginBottom: 20 }}>{error}</div>

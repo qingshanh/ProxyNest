@@ -103,8 +103,9 @@ const renderProgressNodes = (progress: RunProgress | null | undefined) => {
   }
   const renderItems = (items: NonNullable<RunProgress['active']>) => (
     <div style={{ display: 'grid', gap: 6 }}>
+      <style>{`@media (max-width: 768px) { .progress-item { grid-template-columns: 1fr !important; } .progress-item span:last-child { justify-self: start !important; } }`}</style>
       {items.map((item) => (
-        <div key={`${item.action}-${item.id}-${item.updatedAt}`}
+        <div className="progress-item" key={`${item.action}-${item.id}-${item.updatedAt}`}
              style={{ display: 'grid', gridTemplateColumns: '80px 1fr auto', gap: 8, alignItems: 'center', fontSize: '.82em',
                       padding: '6px 10px', borderRadius: 6, background: 'var(--c-bg)' }}>
           <span className={`badge ${item.status === 'running' ? 'badge-info' : item.status === 'success' ? 'badge-success' : 'badge-danger'}`}>
@@ -146,7 +147,7 @@ function ProgressModal({
 }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ minWidth: 520, maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal task-modal" style={{ minWidth: 520, maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -154,6 +155,7 @@ function ProgressModal({
             </svg>
             任务进度
           </h2>
+          <style>{`@media (max-width: 768px) { .task-modal { min-width: auto !important; max-width: 95vw !important; } }`}</style>
           <button className="btn btn-ghost btn-xs" onClick={onClose}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -201,7 +203,7 @@ function ProgressModal({
 function DetailModal({ run, onClose }: { run: TestRunEntity; onClose: () => void }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{ minWidth: 520, maxWidth: 700 }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal detail-modal" style={{ minWidth: 520, maxWidth: 700 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -209,6 +211,7 @@ function DetailModal({ run, onClose }: { run: TestRunEntity; onClose: () => void
             </svg>
             任务详情
           </h2>
+          <style>{`@media (max-width: 768px) { .detail-modal { min-width: auto !important; max-width: 95vw !important; } }`}</style>
           <button className="btn btn-ghost btn-xs" onClick={onClose}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -536,7 +539,7 @@ export function TasksPage() {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" style={{ overflowX: 'auto' }}>
         <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <span>任务历史</span>
           <button className="btn btn-ghost btn-xs" onClick={clearHistory}>清除历史</button>

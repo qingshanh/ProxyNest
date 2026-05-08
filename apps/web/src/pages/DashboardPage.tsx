@@ -65,7 +65,7 @@ export function DashboardPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
         <div className="section-title" style={{ marginBottom: 0 }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -156,7 +156,8 @@ export function DashboardPage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 12 }}>
+      <div className="page-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <style>{`@media (max-width: 768px) { .page-actions { flex-direction: column !important; } .page-actions .btn { width: 100%; justify-content: center; } }`}</style>
         <Link to="/tasks" className="btn btn-primary">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="5 3 19 12 5 21 5 3"/>

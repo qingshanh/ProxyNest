@@ -88,7 +88,7 @@ export function ArtifactsPage() {
   return (
     <div>
       {toast && <div className="toast toast-success">{toast}</div>}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div className="section-title" style={{ marginBottom: 0 }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
@@ -97,7 +97,7 @@ export function ArtifactsPage() {
           </svg>
           订阅
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {artifacts.length > 0 && (
             <button className="btn btn-primary btn-sm" onClick={copyAll}>
               复制全部订阅

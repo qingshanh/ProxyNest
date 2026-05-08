@@ -136,7 +136,7 @@ export function NodesPage() {
   return (
     <div>
       {message && <div className="toast toast-success">{message}</div>}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div className="section-title" style={{ marginBottom: 0 }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3"/>
@@ -144,7 +144,7 @@ export function NodesPage() {
           </svg>
           节点池 ({total} 个)
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <select value={dedupeMode} onChange={(e) => setDedupeMode(e.target.value as DedupeMode)} style={{ fontSize: '.85em', padding: '4px 8px' }}>
             <option value="strict_uri">严格URI去重</option>
             <option value="normalized_config">标准化配置去重</option>

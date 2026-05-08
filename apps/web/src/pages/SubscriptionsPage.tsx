@@ -202,7 +202,7 @@ export function SubscriptionsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <div className="section-title" style={{ marginBottom: 0 }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
@@ -211,7 +211,7 @@ export function SubscriptionsPage() {
           </svg>
           订阅管理
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {sources.length > 0 && (
             <button className="btn btn-primary" onClick={handleCopyAllUrls}>
               复制全部订阅
@@ -231,7 +231,7 @@ export function SubscriptionsPage() {
       </div>
 
       {discoverResult && (
-        <div className="card" style={{ marginBottom: 20, borderColor: 'var(--c-success)' }}>
+        <div className="card" style={{ marginBottom: 20, borderColor: discoverResult.failed.length ? 'var(--c-warning)' : 'var(--c-success)' }}>
           <div className="card-header">GitHub 发现结果</div>
           <div className="grid-3" style={{ fontSize: '.9em' }}>
             <div>搜索仓库: <strong>{discoverResult.searchedRepos}</strong></div>
@@ -241,6 +241,11 @@ export function SubscriptionsPage() {
             <div>跳过已存在: <strong>{discoverResult.skippedExisting}</strong></div>
             <div>失败: <strong style={{ color: 'var(--c-danger)' }}>{discoverResult.failed.length}</strong></div>
           </div>
+          {discoverResult.failed.length > 0 && (
+            <div className="alert alert-error" style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>
+              {discoverResult.failed.slice(0, 5).map((item) => `${item.url}: ${item.error}`).join('\n')}
+            </div>
+          )}
           <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }}
                   onClick={() => setDiscoverResult(null)}>关闭</button>
         </div>
