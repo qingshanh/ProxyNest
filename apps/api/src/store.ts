@@ -1670,8 +1670,14 @@ export class Store {
 
   private mapReusableNode(row: PoolRow): ReusableNodeEntity {
     const node = safeJsonParse<NodeEntity>(String(row.node_json ?? '{}'), this.emptyNodeEntity())
+    const security = node.security ?? { risk: 'unknown' as const, checkedAt: '' }
     return {
       ...node,
+      security: {
+        risk: security.risk ?? 'unknown',
+        detail: security.detail,
+        checkedAt: security.checkedAt || ''
+      },
       poolId: String(row.id),
       qualityScore: Number(row.quality_score ?? 0),
       successStreak: Number(row.success_streak ?? 0),
