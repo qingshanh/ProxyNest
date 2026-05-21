@@ -6,7 +6,7 @@ import { fetch as undiciFetch, ProxyAgent } from 'undici'
 import YAML from 'yaml'
 import type { AppConfig } from './config'
 import { toClashProxy } from './codec'
-import type { NodeEntity, UnlockPlatform, UnlockResult } from './types'
+import type { NodeEntity, SecurityCheck, UnlockPlatform, UnlockResult } from './types'
 import { abortError, newId, nowIso, runLimited, throwIfAborted, withTimeoutSignal } from './utils'
 
 export type AliveProbe = {
@@ -19,6 +19,7 @@ export type AliveProbe = {
 export type SpeedProbe = {
   bps: number
   detail?: string
+  security?: SecurityCheck
 }
 
 export interface ProbeEngine {
@@ -57,6 +58,90 @@ const errorMessage = (error: unknown): string => {
 
 const isAbortError = (error: unknown): boolean => {
   return error instanceof Error && error.name === 'AbortError'
+}
+
+const readSampleBytes = async (res: Response, maxBytes: number): Promise<number> => {
+  if (!res.body) {
+    const buffer = await res.arrayBuffer()
+    return Math.min(buffer.byteLength, maxBytes)
+  }
+  const reader = res.body.getReader()
+  let received = 0
+  try {
+    while (received < maxBytes) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+      received += Math.min(value.byteLength, maxBytes - received)
+    }
+    if (received >= maxBytes) await reader.cancel().catch(() => undefined)
+    return received
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+const tlsRiskPattern = /certificate|cert_|self.?signed|unable to verify|tls|ssl|x509|handshake|ERR_CERT/i
+
+const securityFromError = (error: unknown): SecurityCheck | undefined => {
+  const detail = errorMessage(error)
+  if (!tlsRiskPattern.test(detail)) return undefined
+  return {
+    risk: 'suspicious',
+    detail: `HTTPS certificate validation failed: ${detail}`,
+    checkedAt: nowIso()
+  }
+}
+
+const checkHttpsSecurityViaProxy = async (
+  mixedPort: number,
+  timeoutMs: number,
+  signal?: AbortSignal
+): Promise<SecurityCheck> => {
+  const endpoints = [
+    {
+      url: 'https://www.gstatic.com/generate_204',
+      ok: (status: number, text: string) => [204, 200].includes(status) && text.length < 512
+    },
+    {
+      url: 'https://www.cloudflare.com/cdn-cgi/trace',
+      ok: (status: number, text: string) => status >= 200 && status < 300 && /^ip=/m.test(text)
+    }
+  ]
+  let lastDetail = ''
+  let sawCertificateError = false
+  for (const endpoint of endpoints) {
+    throwIfAborted(signal)
+    const agent = new ProxyAgent(`http://127.0.0.1:${mixedPort}`)
+    try {
+      const res = await undiciFetch(endpoint.url, {
+        dispatcher: agent,
+        signal: withTimeoutSignal(Math.min(timeoutMs, 5000), signal)
+      })
+      const text = res.status === 204 ? '' : await res.text()
+      if (endpoint.ok(res.status, text)) {
+        return {
+          risk: 'safe',
+          detail: `HTTPS probe ok: ${endpoint.url} HTTP ${res.status}`,
+          checkedAt: nowIso()
+        }
+      }
+      lastDetail = `unexpected HTTPS probe response from ${endpoint.url}: HTTP ${res.status}`
+    } catch (error) {
+      const detail = errorMessage(error)
+      sawCertificateError ||= tlsRiskPattern.test(detail)
+      lastDetail = detail
+    } finally {
+      await agent.close().catch(() => undefined)
+    }
+  }
+  return {
+    risk: sawCertificateError ? 'suspicious' : 'unknown',
+    detail: sawCertificateError
+      ? `HTTPS certificate validation failed: ${lastDetail}`
+      : `HTTPS probe inconclusive: ${lastDetail}`,
+    checkedAt: nowIso()
+  }
 }
 
 class TcpFallbackProbeEngine implements ProbeEngine {
@@ -260,10 +345,12 @@ class MihomoProbeEngine implements ProbeEngine {
     return this.withRuntime(node, timeoutMs, signal, async (runtime) => {
       const started = Date.now()
       const bytes = await runtime.downloadBytes(testUrl, timeoutMs, signal)
+      const security = await runtime.checkHttpsSecurity(timeoutMs, signal)
       const seconds = Math.max(0.001, (Date.now() - started) / 1000)
       return {
         bps: Math.round(bytes / seconds),
-        detail: 'mihomo'
+        detail: 'mihomo',
+        security
       }
     })
   }
@@ -313,10 +400,11 @@ class MihomoProbeEngine implements ProbeEngine {
             await onResult(node, result)
           } catch (singleError) {
             if (isAbortError(singleError)) throw singleError
-            await onResult(node, {
-              bps: 0,
-              detail: `batch speed startup failed: ${errorMessage(error)}; single speed failed: ${errorMessage(singleError)}`
-            })
+          await onResult(node, {
+            bps: 0,
+            detail: `batch speed startup failed: ${errorMessage(error)}; single speed failed: ${errorMessage(singleError)}`,
+            security: securityFromError(singleError)
+          })
           } finally {
             await onActive?.(node, false)
           }
@@ -331,16 +419,19 @@ class MihomoProbeEngine implements ProbeEngine {
           await runtime.select(node.id, timeoutMs, signal)
           const started = Date.now()
           const bytes = await runtime.downloadBytes(testUrl, timeoutMs, signal)
+          const security = await runtime.checkHttpsSecurity(timeoutMs, signal)
           const seconds = Math.max(0.001, (Date.now() - started) / 1000)
           await onResult(node, {
             bps: Math.round(bytes / seconds),
-            detail: 'mihomo batch speed'
+            detail: 'mihomo batch speed',
+            security
           })
         } catch (error) {
           if (isAbortError(error)) throw error
           await onResult(node, {
             bps: 0,
-            detail: errorMessage(error)
+            detail: errorMessage(error),
+            security: securityFromError(error)
           })
         } finally {
           await onActive?.(node, false)
@@ -356,29 +447,32 @@ class MihomoProbeEngine implements ProbeEngine {
       const checkedAt = nowIso()
       try {
         if (platform === 'openai') {
-          const res = await runtime.fetchText('https://chat.openai.com/cdn-cgi/trace', timeoutMs, signal)
+          const res = await runtime.fetchText('https://chatgpt.com/cdn-cgi/trace', timeoutMs, signal)
           const region = /loc=([A-Z]{2})/.exec(res.text)?.[1]
+          const unavailable = /unsupported|blocked/i.test(res.text)
           return {
-            available: res.status >= 200 && res.status < 500 && !/unsupported|blocked/i.test(res.text),
+            available: res.status >= 200 && res.status < 500 && !unavailable,
             region,
-            detail: `HTTP ${res.status}`,
+            detail: `HTTP ${res.status}${region ? ` ${region}` : ''}${unavailable ? ' unavailable' : ''}`,
             checkedAt
           }
         }
         if (platform === 'youtube') {
           const res = await runtime.fetchText('https://www.youtube.com/premium', timeoutMs, signal)
+          const blocked = /not available in your country|premium is not available/i.test(res.text)
           return {
-            available: res.status >= 200 && res.status < 500 && !/not available in your country/i.test(res.text),
-            detail: `HTTP ${res.status}`,
+            available: res.status >= 200 && res.status < 500 && !blocked,
+            detail: `HTTP ${res.status}${blocked ? ' blocked/unavailable' : ''}`,
             checkedAt
           }
         }
         if (platform === 'netflix') {
           const res = await runtime.fetchText('https://www.netflix.com/title/80018499', timeoutMs, signal)
           const blocked = /not available|unavailable|blocked|proxy|vpn|unblocker|pardon the interruption/i.test(res.text)
+          const limited = res.status === 404 || /watch free|netflix originals/i.test(res.text)
           return {
-            available: res.status >= 200 && res.status < 500 && !blocked,
-            detail: `HTTP ${res.status}${blocked ? ' blocked/unavailable' : ''}`,
+            available: res.status >= 200 && res.status < 500 && !blocked && !limited,
+            detail: `HTTP ${res.status}${blocked ? ' blocked/unavailable' : limited ? ' limited/catalog-only' : ''}`,
             checkedAt
           }
         }
@@ -553,8 +647,7 @@ class MihomoRuntime {
         signal: withTimeoutSignal(timeoutMs, signal)
       })
       if (!res.ok) throw new Error(`speed test HTTP ${res.status}`)
-      const buffer = await res.arrayBuffer()
-      return buffer.byteLength
+      return await readSampleBytes(res, 2 * 1024 * 1024)
     } finally {
       await agent.close().catch(() => undefined)
     }
@@ -573,6 +666,10 @@ class MihomoRuntime {
     } finally {
       await agent.close().catch(() => undefined)
     }
+  }
+
+  async checkHttpsSecurity(timeoutMs: number, signal?: AbortSignal): Promise<SecurityCheck> {
+    return checkHttpsSecurityViaProxy(this.mixedPort, timeoutMs, signal)
   }
 
   private async waitReady(timeoutMs: number, signal?: AbortSignal): Promise<void> {
@@ -785,11 +882,14 @@ class MihomoBatchRuntime {
         signal: withTimeoutSignal(timeoutMs, signal)
       })
       if (!res.ok) throw new Error(`speed test HTTP ${res.status}`)
-      const buffer = await res.arrayBuffer()
-      return buffer.byteLength
+      return await readSampleBytes(res, 2 * 1024 * 1024)
     } finally {
       await agent.close().catch(() => undefined)
     }
+  }
+
+  async checkHttpsSecurity(timeoutMs: number, signal?: AbortSignal): Promise<SecurityCheck> {
+    return checkHttpsSecurityViaProxy(this.mixedPort, timeoutMs, signal)
   }
 
   private async waitReady(timeoutMs: number, signal?: AbortSignal): Promise<void> {

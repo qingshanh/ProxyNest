@@ -19,8 +19,14 @@ export type ProxyProtocol =
   | 'vless'
   | 'trojan'
   | 'ss'
+  | 'ssr'
   | 'hysteria2'
+  | 'hysteria'
   | 'tuic'
+  | 'snell'
+  | 'http'
+  | 'socks5'
+  | 'anytls'
   | 'unknown'
 
 export type DedupeMode =
@@ -58,6 +64,14 @@ export type UnlockResult = {
 }
 
 export type UnlockMap = Partial<Record<UnlockPlatform, UnlockResult>>
+
+export type SecurityRiskLevel = 'unknown' | 'safe' | 'suspicious'
+
+export type SecurityCheck = {
+  risk: SecurityRiskLevel
+  detail?: string
+  checkedAt: string
+}
 
 export type NormalizedNode = {
   id: string
@@ -111,6 +125,7 @@ export type NodeEntity = {
   speedBps: number | null
   speedMBps: number | null
   speedQualified: boolean
+  security: SecurityCheck
   unlock: UnlockMap
   duplicateGroup: string | null
   lastTestedAt: string | null

@@ -16,6 +16,7 @@ import type {
   RunType,
   SourceEntity,
   TestRunEntity,
+  SecurityCheck,
   UnlockMap
 } from './types'
 import {
@@ -101,6 +102,7 @@ export class Store {
     await this.ensureAdminUser()
     this.ensureSettings()
     this.deleteExpiredSessions()
+    this.pruneDeadCurrentNodes()
     this.pruneDeadReusableNodes()
     this.pruneRunsByAge(this.getSettings().schedule.runHistoryRetentionDays)
   }
@@ -208,8 +210,8 @@ export class Store {
       settings.concurrency.aliveRecommended = 300
       changed = true
     }
-    if (settings.concurrency.speedRecommended === 8) {
-      settings.concurrency.speedRecommended = 12
+    if ([8, 12].includes(settings.concurrency.speedRecommended)) {
+      settings.concurrency.speedRecommended = 4
       changed = true
     }
     if (!('databaseUrl' in (settings.geoip as unknown as Record<string, unknown>))) {
@@ -257,6 +259,12 @@ export class Store {
           concurrency: 12,
           validateCandidates: true,
           queries: [
+            'clash subscription',
+            'clash meta subscription',
+            'v2ray subscription',
+            'vless trojan subscription',
+            'mihomo subscription',
+            'proxy provider yaml',
             'free clash subscription',
             'free v2ray subscription',
             'clash nodes',
@@ -269,7 +277,7 @@ export class Store {
       },
       concurrency: {
         aliveRecommended: 300,
-        speedRecommended: 12,
+        speedRecommended: 4,
         unlockRecommended: 40
       },
       reusablePool: {
@@ -632,11 +640,12 @@ export class Store {
     const now = nowIso()
     const inputCount = nodes.length
     const dedupedNodes = this.dedupeNormalizedNodes(nodes, this.getSettings().dedupe.defaultMode)
+    const existingByFingerprint = new Map(
+      this.db.all<Row>('SELECT * FROM nodes').map((row) => [String(row.fingerprint), row])
+    )
     this.db.transaction(() => {
       for (const node of dedupedNodes) {
-        const existing = this.db.get<Row>('SELECT * FROM nodes WHERE fingerprint = ? LIMIT 1', [
-          node.fingerprint
-        ])
+        const existing = existingByFingerprint.get(node.fingerprint)
         if (existing) {
           const sourceIds = safeJsonParse<string[]>(String(existing.source_ids_json), [])
           if (!sourceIds.includes(sourceId)) sourceIds.push(sourceId)
@@ -656,6 +665,10 @@ export class Store {
             ],
             false
           )
+          existing.source_ids_json = JSON.stringify(sourceIds)
+          existing.raw_uri = existing.raw_uri ?? node.rawUri ?? null
+          existing.clash_json = existing.clash_json ?? (node.clash ? JSON.stringify(node.clash) : null)
+          existing.updated_at = now
         } else {
           this.db.run(
             `INSERT INTO nodes
@@ -678,6 +691,14 @@ export class Store {
             ],
             false
           )
+          existingByFingerprint.set(node.fingerprint, {
+            id: node.id,
+            fingerprint: node.fingerprint,
+            source_ids_json: JSON.stringify([sourceId]),
+            raw_uri: node.rawUri ?? null,
+            clash_json: node.clash ? JSON.stringify(node.clash) : null,
+            updated_at: now
+          })
         }
       }
     })
@@ -798,6 +819,7 @@ export class Store {
       .all<PoolRow>('SELECT * FROM node_pool WHERE keep_for_reprobe = 1 ORDER BY quality_score DESC, updated_at DESC')
       .map((row) => this.mapReusableNode(row))
       .filter((item) => item.alive)
+      .filter((item) => item.security.risk !== 'suspicious')
   }
 
   getReusableNode(id: string): ReusableNodeEntity | null {
@@ -821,6 +843,13 @@ export class Store {
     return true
   }
 
+  deleteDeadNode(id: string): boolean {
+    const node = this.getNode(id)
+    if (!node) return false
+    if (node.alive) return false
+    return this.deleteNode(id)
+  }
+
   updateNodeProbe(
     id: string,
     patch: Partial<{
@@ -829,6 +858,7 @@ export class Store {
       latencyMs: number | null
       speedBps: number | null
       speedQualified: boolean
+      security: SecurityCheck
       countryCode: string | null
       countryName: string | null
       exitIp: string | null
@@ -845,6 +875,7 @@ export class Store {
            latency_ms = ?,
            speed_bps = ?,
            speed_qualified = ?,
+           security_json = ?,
            country_code = ?,
            country_name = ?,
            exit_ip = ?,
@@ -858,6 +889,7 @@ export class Store {
         patch.latencyMs === undefined ? node.latencyMs : patch.latencyMs,
         patch.speedBps === undefined ? node.speedBps : patch.speedBps,
         toIntBool(patch.speedQualified ?? node.speedQualified),
+        JSON.stringify(patch.security ?? node.security),
         patch.countryCode === undefined ? node.countryCode : patch.countryCode,
         patch.countryName === undefined ? node.countryName : patch.countryName,
         patch.exitIp === undefined ? node.exitIp : patch.exitIp,
@@ -1104,9 +1136,10 @@ export class Store {
     const speedMBps = node.speedMBps ?? 0
     const latency = node.latencyMs ?? 9999
     const alive = node.alive
+    const suspicious = node.security.risk === 'suspicious'
     const speedMeasured = node.speedBps != null
     const speedFloorOk = !speedMeasured || speedMBps >= settings.absoluteMinSpeedMBps
-    const speedOk = speedFloorOk && (node.speedQualified || speedMBps >= settings.minSpeedMBps)
+    const speedOk = !suspicious && speedFloorOk && (node.speedQualified || speedMBps >= settings.minSpeedMBps)
     const latencyOk = node.latencyMs == null || node.latencyMs <= settings.maxLatencyMs
     const aliveFailStreak = override?.aliveFailStreak ?? (alive ? 0 : (existing?.aliveFailStreak ?? existing?.failStreak ?? 0) + 1)
     const speedFailStreak = override?.speedFailStreak ?? (speedOk ? 0 : (existing?.speedFailStreak ?? 0) + 1)
@@ -1117,10 +1150,11 @@ export class Store {
         unlockCount * 220 -
         latency / 4 +
         (existing?.successStreak ?? 0) * 30 -
-        Math.max(aliveFailStreak, speedFailStreak, latencyFailStreak) * 50
+        Math.max(aliveFailStreak, speedFailStreak, latencyFailStreak) * 50 -
+        (suspicious ? 1200 : 0)
     )
     const shouldKeepByQuality =
-      alive && speedFloorOk && (speedMBps >= settings.minSpeedMBps || latency <= settings.maxLatencyMs || unlockCount > 0 || baseScore >= 700)
+      alive && !suspicious && speedFloorOk && (speedMBps >= settings.minSpeedMBps || latency <= settings.maxLatencyMs || unlockCount > 0 || baseScore >= 700)
     const failStreak = override?.failStreak ?? (shouldKeepByQuality ? 0 : (existing?.failStreak ?? 0) + 1)
     const removeLimit = this.qualityFailureLimit(settings)
     const removeByQuality = removeLimit > 0 && failStreak >= removeLimit
@@ -1234,6 +1268,10 @@ export class Store {
         this.db.run('DELETE FROM node_pool WHERE id = ?', [String(row.id)], false)
       }
     })
+  }
+
+  private pruneDeadCurrentNodes(): void {
+    this.db.run('DELETE FROM nodes WHERE alive = 0 AND last_tested_at IS NOT NULL')
   }
 
   private pruneDeadReusableNodes(): void {
@@ -1561,6 +1599,10 @@ export class Store {
 
   private mapNode(row: Row): NodeEntity {
     const speedBps = row.speed_bps == null ? null : Number(row.speed_bps)
+    const security = safeJsonParse<SecurityCheck>(String(row.security_json ?? '{}'), {
+      risk: 'unknown',
+      checkedAt: ''
+    })
     return {
       id: String(row.id),
       fingerprint: String(row.fingerprint),
@@ -1580,6 +1622,11 @@ export class Store {
       speedBps,
       speedMBps: toMBps(speedBps),
       speedQualified: fromIntBool(row.speed_qualified),
+      security: {
+        risk: security.risk ?? 'unknown',
+        detail: security.detail,
+        checkedAt: security.checkedAt || ''
+      },
       unlock: safeJsonParse<UnlockMap>(String(row.unlock_json ?? '{}'), {}),
       duplicateGroup: row.duplicate_group == null ? null : String(row.duplicate_group),
       lastTestedAt: row.last_tested_at == null ? null : String(row.last_tested_at),
@@ -1609,6 +1656,10 @@ export class Store {
       speedBps: null,
       speedMBps: null,
       speedQualified: false,
+      security: {
+        risk: 'unknown',
+        checkedAt: ''
+      },
       unlock: {},
       duplicateGroup: null,
       lastTestedAt: null,
@@ -1655,6 +1706,7 @@ export class Store {
       'latencyMs' in patch ||
       'speedBps' in patch ||
       'speedQualified' in patch ||
+      'security' in patch ||
       'countryCode' in patch ||
       'countryName' in patch ||
       'exitIp' in patch ||
@@ -1758,12 +1810,14 @@ export class Store {
 
   private pickBetterNode(a: NodeEntity, b: NodeEntity): NodeEntity {
     const score = (node: NodeEntity): number => {
+      const securityPenalty = node.security.risk === 'suspicious' ? 100000 : 0
       return (
         (node.alive ? 10000 : 0) +
         (node.speedBps ?? 0) / 1024 / 1024 +
         Object.values(node.unlock).filter((item) => item?.available).length * 100 -
         (node.latencyMs ?? 9999) / 10 +
-        node.sourceIds.length
+        node.sourceIds.length -
+        securityPenalty
       )
     }
     return score(b) > score(a) ? b : a

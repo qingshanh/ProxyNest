@@ -143,6 +143,42 @@ export const countryNamesZh: Record<string, string> = {
 }
 
 const countryAliases: Array<{ code: string; pattern: RegExp }> = [
+  { code: 'US', pattern: /united states|america|usa|los angeles|san jose|new york|dallas|seattle|chicago|ashburn/i },
+  { code: 'JP', pattern: /japan|tokyo|osaka|saitama/i },
+  { code: 'SG', pattern: /singapore/i },
+  { code: 'HK', pattern: /hong ?kong/i },
+  { code: 'TW', pattern: /taiwan|taipei/i },
+  { code: 'KR', pattern: /korea|seoul/i },
+  { code: 'GB', pattern: /united kingdom|britain|london|manchester/i },
+  { code: 'DE', pattern: /germany|frankfurt|berlin/i },
+  { code: 'FR', pattern: /france|paris/i },
+  { code: 'NL', pattern: /netherlands|holland|amsterdam/i },
+  { code: 'CA', pattern: /canada|toronto|vancouver|montreal/i },
+  { code: 'AU', pattern: /australia|sydney|melbourne/i },
+  { code: 'RU', pattern: /russia|moscow/i },
+  { code: 'IN', pattern: /india|mumbai|delhi/i },
+  { code: 'TH', pattern: /thailand|bangkok/i },
+  { code: 'VN', pattern: /vietnam|hanoi|ho chi minh/i },
+  { code: 'PH', pattern: /philippines|manila/i },
+  { code: 'ID', pattern: /indonesia|jakarta/i },
+  { code: 'MY', pattern: /malaysia|kuala lumpur/i },
+  { code: 'TR', pattern: /turkey|istanbul/i },
+  { code: 'BR', pattern: /brazil|sao paulo/i },
+  { code: 'IT', pattern: /italy|milan|rome/i },
+  { code: 'ES', pattern: /spain|madrid/i },
+  { code: 'SE', pattern: /sweden|stockholm/i },
+  { code: 'CH', pattern: /switzerland|zurich/i },
+  { code: 'PL', pattern: /poland|warsaw/i },
+  { code: 'AE', pattern: /uae|dubai/i },
+  { code: 'AR', pattern: /argentina|buenos aires/i },
+  { code: 'CL', pattern: /chile|santiago/i },
+  { code: 'FI', pattern: /finland|helsinki/i },
+  { code: 'IE', pattern: /ireland|dublin/i },
+  { code: 'MX', pattern: /mexico|mexico city/i },
+  { code: 'NO', pattern: /norway|oslo/i },
+  { code: 'NZ', pattern: /new zealand|auckland/i },
+  { code: 'PT', pattern: /portugal|lisbon/i },
+  { code: 'ZA', pattern: /south africa|johannesburg/i },
   { code: 'US', pattern: /美国|美國|洛杉矶|圣何塞|西雅图|纽约|达拉斯|us|usa|united states|america/i },
   { code: 'JP', pattern: /日本|东京|大阪|埼玉|jp|japan|tokyo|osaka/i },
   { code: 'SG', pattern: /新加坡|狮城|sg|singapore/i },
@@ -178,7 +214,25 @@ export const countryNameFromCode = (code: string | null | undefined): string | n
   return countryNamesZh[normalized] || normalized
 }
 
+const countryCodeFromFlag = (text: string): string | null => {
+  const match = /[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/u.exec(text)
+  if (!match) return null
+  const chars = Array.from(match[0])
+  if (chars.length !== 2) return null
+  const code = chars
+    .map((char) => String.fromCharCode(char.codePointAt(0)! - 0x1f1e6 + 65))
+    .join('')
+  return /^[A-Z]{2}$/.test(code) ? code : null
+}
+
 export const inferCountryFromText = (text: string): GeoResult => {
+  const flagCode = countryCodeFromFlag(text)
+  if (flagCode) {
+    return {
+      countryCode: flagCode,
+      countryName: countryNameFromCode(flagCode)
+    }
+  }
   for (const item of countryAliases) {
     if (item.pattern.test(text)) {
       return {

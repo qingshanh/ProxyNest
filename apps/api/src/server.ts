@@ -96,8 +96,8 @@ const buildDefaultFullParams = (store: Store, body: Record<string, unknown>): Fu
       concurrency: settings.concurrency.speedRecommended,
       minMBps: settings.reusablePool.minSpeedMBps,
       targetCount: 50,
-      testUrl: 'https://speed.cloudflare.com/__down?bytes=5000000',
-      timeoutMs: 15000,
+      testUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
+      timeoutMs: 8000,
       ...speedBody
     },
     unlock: {
@@ -240,8 +240,8 @@ const main = async (): Promise<void> => {
         concurrency: settings.concurrency.speedRecommended,
         minMBps: settings.reusablePool.minSpeedMBps,
         targetCount: 50,
-        testUrl: 'https://speed.cloudflare.com/__down?bytes=5000000',
-        timeoutMs: 15000,
+        testUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
+        timeoutMs: 8000,
         notifyTelegram
       }
     }
@@ -466,8 +466,8 @@ const main = async (): Promise<void> => {
       concurrency: 1,
       minMBps: settings.reusablePool.minSpeedMBps,
       targetCount: 1,
-      testUrl: 'https://speed.cloudflare.com/__down?bytes=5000000',
-      timeoutMs: 15000,
+      testUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
+      timeoutMs: 8000,
       notifyTelegram: notifyTelegramFor(store, 'speed'),
       ...bodyOrEmpty(request)
     }, { priority: 'high' })
@@ -490,7 +490,7 @@ const main = async (): Promise<void> => {
       format: z.enum(['clash', 'v2ray']).default('clash')
     }).parse(request.query)
     const nodes = store.exportNodes({
-      alive: query.alive == null ? undefined : query.alive === 'true',
+      alive: query.alive == null ? true : query.alive === 'true',
       protocol: query.protocol,
       country: query.country,
       minSpeedMBps: query.minSpeedMBps
@@ -606,8 +606,8 @@ const main = async (): Promise<void> => {
       concurrency: settings.concurrency.speedRecommended,
       minMBps: settings.reusablePool.minSpeedMBps,
       targetCount: 50,
-      testUrl: 'https://speed.cloudflare.com/__down?bytes=5000000',
-      timeoutMs: 15000,
+      testUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
+      timeoutMs: 8000,
       notifyTelegram: notifyTelegramFor(store, 'speed'),
       ...bodyOrEmpty(request)
     }

@@ -32,16 +32,25 @@ export function SubscriptionsPage() {
   const handleBatchAdd = async () => {
     const lines = batchText.trim().split('\n').filter(Boolean)
     if (!lines.length) return
-    const items = lines.map((line) => {
+    const seenUrls = new Set<string>()
+    const items = lines.flatMap((line) => {
       const trimmed = line.trim()
       const lastSpace = trimmed.lastIndexOf(' ')
+      let item: { name?: string; url: string }
       if (lastSpace > 0) {
         const maybeUrl = trimmed.slice(lastSpace + 1)
         if (maybeUrl.startsWith('http://') || maybeUrl.startsWith('https://')) {
-          return { name: trimmed.slice(0, lastSpace).trim(), url: maybeUrl }
+          item = { name: trimmed.slice(0, lastSpace).trim(), url: maybeUrl }
+        } else {
+          item = { url: trimmed }
         }
+      } else {
+        item = { url: trimmed }
       }
-      return { url: trimmed }
+      const normalizedUrl = item.url.trim().replace(/\/+$/, '')
+      if (seenUrls.has(normalizedUrl)) return []
+      seenUrls.add(normalizedUrl)
+      return [{ ...item, url: normalizedUrl }]
     })
     setAdding(true)
     setAddResult(null)

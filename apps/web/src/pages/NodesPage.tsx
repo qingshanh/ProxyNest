@@ -25,7 +25,6 @@ export function NodesPage() {
     setLoading(true)
     try {
       const params: Record<string, string | number> = { page, pageSize }
-      if (filters.alive) params.alive = filters.alive
       if (filters.protocol) params.protocol = filters.protocol
       if (filters.country) params.country = filters.country
       if (filters.unlock) params.unlock = filters.unlock
@@ -115,7 +114,6 @@ export function NodesPage() {
 
   const handleExport = (format: string) => {
     const params: Record<string, string | number | undefined> = {}
-    if (filters.alive) params.alive = filters.alive
     if (filters.protocol) params.protocol = filters.protocol
     if (filters.country) params.country = filters.country
     if (filters.unlock) params.unlock = filters.unlock
@@ -124,7 +122,7 @@ export function NodesPage() {
     window.open(url, '_blank')
   }
 
-  const protocols: ProxyProtocol[] = ['vmess', 'vless', 'trojan', 'ss', 'hysteria2', 'tuic']
+  const protocols: ProxyProtocol[] = ['vmess', 'vless', 'trojan', 'ss', 'ssr', 'hysteria2', 'hysteria', 'tuic', 'snell', 'http', 'socks5', 'anytls']
   const unlockPlatforms: UnlockPlatform[] = ['openai', 'youtube', 'netflix', 'disney']
   const dedupeDescriptions: Record<DedupeMode, string> = {
     strict_uri: '严格匹配完整 URI 或完整配置，最保守，只有配置完全一致才会删重。',
@@ -161,9 +159,9 @@ export function NodesPage() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="form-row">
-          <div className="form-group">
+          <div className="form-group" style={{ display: 'none' }}>
             <label>存活状态</label>
-            <select value={filters.alive} onChange={(e) => { setFilters({ ...filters, alive: e.target.value }); setPage(1) }}>
+            <select hidden value={filters.alive} onChange={(e) => { setFilters({ ...filters, alive: e.target.value }); setPage(1) }}>
               <option value="">全部</option>
               <option value="true">存活</option>
               <option value="false">未存活</option>

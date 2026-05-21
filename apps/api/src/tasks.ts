@@ -337,17 +337,21 @@ export class TaskQueue {
       result: Awaited<ReturnType<ProbeEngine['testAlive']>>
     ) => {
       const node = candidate.node
-      const geo = await this.resolveNodeCountry(node, result.exitIp, this.signal(runId))
       if (result.alive) alive += 1
-      const updated = this.updateCandidateProbe(candidate, {
-        alive: result.alive,
-        latencyMs: result.latencyMs,
-        exitIp: result.exitIp,
-        countryCode: geo.countryCode,
-        countryName: geo.countryName,
-        lastTestedAt: nowIso()
-      })
-      if (result.alive && updated) aliveCandidates.push({ ...candidate, node: updated })
+      if (!result.alive) {
+        this.removeDeadCandidate(candidate)
+      } else {
+        const geo = await this.resolveNodeCountry(node, result.exitIp, this.signal(runId))
+        const updated = this.updateCandidateProbe(candidate, {
+          alive: true,
+          latencyMs: result.latencyMs,
+          exitIp: result.exitIp,
+          countryCode: geo.countryCode,
+          countryName: geo.countryName,
+          lastTestedAt: nowIso()
+        })
+        if (updated) aliveCandidates.push({ ...candidate, node: updated })
+      }
       this.finishProgressNode(runId, candidate, 'alive', result.alive ? 'success' : 'failed', {
         alive: result.alive,
         latencyMs: result.latencyMs,
@@ -391,17 +395,21 @@ export class TaskQueue {
       try {
         const node = candidate.node
         const result = await this.services.probe.testAlive(node, timeoutMs, this.signal(runId))
-        const geo = await this.resolveNodeCountry(node, result.exitIp, this.signal(runId))
         if (result.alive) alive += 1
-        const updated = this.updateCandidateProbe(candidate, {
-          alive: result.alive,
-          latencyMs: result.latencyMs,
-          exitIp: result.exitIp,
-          countryCode: geo.countryCode,
-          countryName: geo.countryName,
-          lastTestedAt: nowIso()
-        })
-        if (result.alive && updated) aliveCandidates.push({ ...candidate, node: updated })
+        if (!result.alive) {
+          this.removeDeadCandidate(candidate)
+        } else {
+          const geo = await this.resolveNodeCountry(node, result.exitIp, this.signal(runId))
+          const updated = this.updateCandidateProbe(candidate, {
+            alive: true,
+            latencyMs: result.latencyMs,
+            exitIp: result.exitIp,
+            countryCode: geo.countryCode,
+            countryName: geo.countryName,
+            lastTestedAt: nowIso()
+          })
+          if (updated) aliveCandidates.push({ ...candidate, node: updated })
+        }
         this.finishProgressNode(runId, candidate, 'alive', result.alive ? 'success' : 'failed', {
           alive: result.alive,
           latencyMs: result.latencyMs,
@@ -409,11 +417,7 @@ export class TaskQueue {
         })
       } catch (error) {
         if (this.isCancelled(runId, error)) throw new TaskCancelledError()
-        this.updateCandidateProbe(candidate, {
-          alive: false,
-          latencyMs: null,
-          lastTestedAt: nowIso()
-        })
+        this.removeDeadCandidate(candidate)
         this.finishProgressNode(runId, candidate, 'alive', 'failed', {
           alive: false,
           latencyMs: null,
@@ -436,21 +440,21 @@ export class TaskQueue {
     candidates?: ProbeCandidate[]
   ): Promise<ProbeCandidate[]> {
     const concurrency = Number(params.concurrency ?? 8)
-    const timeoutMs = Number(params.timeoutMs ?? 15000)
+    const timeoutMs = Number(params.timeoutMs ?? 8000)
     const minMBps = Number(params.minMBps ?? 3)
     const targetCount = Number(params.targetCount ?? 50)
-    const testUrl = String(params.testUrl ?? 'https://speed.cloudflare.com/__down?bytes=5000000')
+    const testUrl = String(params.testUrl ?? 'https://speed.cloudflare.com/__down?bytes=1048576')
     const nodeIds = this.stringSetParam(params.nodeIds)
     const poolIds = this.stringSetParam(params.poolIds)
     const hasTargetFilter = nodeIds.size > 0 || poolIds.size > 0
-    const nodes = (candidates ?? this.getCandidatesForParams(params, !hasTargetFilter)).filter(
-      (candidate) => {
+    const nodes = (candidates ?? this.getCandidatesForParams(params, !hasTargetFilter))
+      .filter((candidate) => {
         if (!hasTargetFilter && !candidate.node.alive) return false
         if (!hasTargetFilter) return true
         if (candidate.origin === 'current') return nodeIds.has(candidate.node.id)
         return Boolean(candidate.poolId && poolIds.has(candidate.poolId))
-      }
-    )
+      })
+      .sort((a, b) => this.speedCandidateScore(b) - this.speedCandidateScore(a))
     if (!nodes.length) {
       throw new Error('没有可测速的存活节点，请先运行测活并确认至少一个节点存活')
     }
@@ -469,6 +473,7 @@ export class TaskQueue {
       this.updateCandidateProbe(candidate, {
         speedBps: result.bps,
         speedQualified: ok,
+        security: result.security,
         lastTestedAt: nowIso()
       })
       this.finishProgressNode(runId, candidate, 'speed', ok ? 'success' : 'failed', {
@@ -667,6 +672,31 @@ export class TaskQueue {
     return updated
   }
 
+  private removeDeadCandidate(candidate: ProbeCandidate): void {
+    candidate.node = {
+      ...candidate.node,
+      alive: false,
+      latencyMs: null,
+      speedBps: null,
+      speedMBps: null,
+      speedQualified: false,
+      lastTestedAt: nowIso()
+    }
+    if (candidate.origin === 'pool' && candidate.poolId) {
+      this.services.store.updateReusableNodeProbe(candidate.poolId, {
+        node: {
+          alive: false,
+          latencyMs: null,
+          speedBps: null,
+          speedQualified: false,
+          lastTestedAt: nowIso()
+        }
+      })
+      return
+    }
+    this.services.store.deleteNode(candidate.node.id)
+  }
+
   private getCandidatesForParams(params: Record<string, unknown>, aliveOnly: boolean): ProbeCandidate[] {
     const scope = String(params.scope ?? (aliveOnly ? 'alive' : 'all'))
     const includeAllPool = Boolean(params.includeAllPool) || scope === 'pool'
@@ -674,6 +704,20 @@ export class TaskQueue {
     if (scope === 'pool') return candidates.filter((candidate) => candidate.origin === 'pool')
     if (scope === 'current') return candidates.filter((candidate) => candidate.origin === 'current')
     return candidates
+  }
+
+  private speedCandidateScore(candidate: ProbeCandidate): number {
+    const node = candidate.node
+    const unlockCount = Object.values(node.unlock).filter((item) => item?.available).length
+    return (
+      (candidate.origin === 'pool' ? 1200 : 0) +
+      (node.speedQualified ? 900 : 0) +
+      (node.speedMBps ?? 0) * 120 +
+      unlockCount * 160 +
+      Math.max(0, 1000 - (node.latencyMs ?? 1000)) +
+      node.sourceIds.length * 8 -
+      (node.security.risk === 'suspicious' ? 100000 : 0)
+    )
   }
 
   private generateArtifactsAfterPartialRun(type: RunType): void {

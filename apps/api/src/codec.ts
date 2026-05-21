@@ -8,10 +8,19 @@ const protocolAliases: Record<string, ProxyProtocol> = {
   vless: 'vless',
   trojan: 'trojan',
   ss: 'ss',
+  ssr: 'ssr',
   shadowsocks: 'ss',
+  shadowsocksr: 'ssr',
   hysteria2: 'hysteria2',
   hy2: 'hysteria2',
-  tuic: 'tuic'
+  hysteria: 'hysteria',
+  tuic: 'tuic',
+  snell: 'snell',
+  http: 'http',
+  https: 'http',
+  socks: 'socks5',
+  socks5: 'socks5',
+  anytls: 'anytls'
 }
 
 type ParseOptions = {
@@ -144,7 +153,7 @@ const collectTextCandidates = (content: string, maxItems: number): CandidateResu
     for (const rawLine of value.split(/\r?\n/)) {
       const line = rawLine.trim()
       if (!line) continue
-      if (/^(vmess|vless|trojan|ss|hysteria2|hy2|tuic):\/\//i.test(line)) {
+      if (/^(vmess|vless|trojan|ss|ssr|hysteria2|hy2|hysteria|tuic|socks|socks5|anytls):\/\//i.test(line)) {
         candidates.add(line)
         if (candidates.size > maxItems) {
           truncated = true
@@ -167,7 +176,7 @@ const parseUriNode = (uri: string, sourceId: string): NormalizedNode | null => {
   try {
     if (protocol === 'vmess') return parseVmess(uri, sourceId)
     if (protocol === 'ss') return parseShadowsocks(uri, sourceId)
-    if (['vless', 'trojan', 'hysteria2', 'tuic'].includes(protocol)) {
+    if (['vless', 'trojan', 'hysteria2', 'hysteria', 'tuic', 'socks5', 'anytls'].includes(protocol)) {
       return parseUrlLike(uri, sourceId, protocol)
     }
     return null
@@ -257,9 +266,23 @@ const parseUrlLike = (uri: string, sourceId: string, protocol: ProxyProtocol): N
     clash.password = decodeURIComponent(url.username)
     clash.sni = params.sni
     clash['skip-cert-verify'] = params.insecure === '1'
+  } else if (protocol === 'hysteria') {
+    clash.auth_str = decodeURIComponent(url.username || params.auth || params.auth_str || '')
+    clash.protocol = params.protocol || 'udp'
+    clash['obfs-protocol'] = params.obfsProtocol || params.obfs
+    clash['obfs'] = params.obfs
+    clash.sni = params.peer || params.sni
+    clash['skip-cert-verify'] = params.insecure === '1'
   } else if (protocol === 'tuic') {
     clash.uuid = decodeURIComponent(url.username)
     clash.password = decodeURIComponent(url.password)
+    clash.sni = params.sni
+  } else if (protocol === 'socks5') {
+    clash.type = 'socks5'
+    if (url.username) clash.username = decodeURIComponent(url.username)
+    if (url.password) clash.password = decodeURIComponent(url.password)
+  } else if (protocol === 'anytls') {
+    clash.password = decodeURIComponent(url.username)
     clash.sni = params.sni
   }
   return {

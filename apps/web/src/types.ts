@@ -14,7 +14,20 @@ export type PageResult<T> = {
   total: number
 }
 
-export type ProxyProtocol = 'vmess' | 'vless' | 'trojan' | 'ss' | 'hysteria2' | 'tuic' | 'unknown'
+export type ProxyProtocol =
+  | 'vmess'
+  | 'vless'
+  | 'trojan'
+  | 'ss'
+  | 'ssr'
+  | 'hysteria2'
+  | 'hysteria'
+  | 'tuic'
+  | 'snell'
+  | 'http'
+  | 'socks5'
+  | 'anytls'
+  | 'unknown'
 export type DedupeMode = 'strict_uri' | 'normalized_config' | 'endpoint' | 'exit_ip_after_alive'
 export type UnlockPlatform = 'openai' | 'youtube' | 'netflix' | 'disney'
 export type RunType = 'fetch' | 'alive' | 'speed' | 'unlock' | 'country_backup' | 'full'
@@ -23,6 +36,8 @@ export type RunStatus = 'queued' | 'running' | 'paused' | 'success' | 'failed' |
 export type RunStage = 'discover' | 'fetch' | 'dedupe' | 'alive' | 'speed' | 'unlock' | 'country_backup' | 'artifact' | 'notify'
 
 export type UnlockMap = Partial<Record<UnlockPlatform, { available: boolean; region?: string; detail?: string; checkedAt: string }>>
+export type SecurityRiskLevel = 'unknown' | 'safe' | 'suspicious'
+export type SecurityCheck = { risk: SecurityRiskLevel; detail?: string; checkedAt: string }
 
 export type SourceEntity = {
   id: string
@@ -63,6 +78,7 @@ export type NodeEntity = {
   speedBps: number | null
   speedMBps: number | null
   speedQualified: boolean
+  security: SecurityCheck
   unlock: UnlockMap
   duplicateGroup: string | null
   lastTestedAt: string | null

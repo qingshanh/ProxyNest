@@ -157,6 +157,7 @@ export class AppDb {
         latency_ms INTEGER,
         speed_bps INTEGER,
         speed_qualified INTEGER NOT NULL DEFAULT 0,
+        security_json TEXT NOT NULL DEFAULT '{}',
         unlock_json TEXT NOT NULL DEFAULT '{}',
         duplicate_group TEXT,
         last_tested_at TEXT,
@@ -232,6 +233,7 @@ export class AppDb {
     this.ensureColumn('node_pool', 'alive_fail_streak', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('node_pool', 'speed_fail_streak', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('node_pool', 'latency_fail_streak', 'INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn('nodes', 'security_json', "TEXT NOT NULL DEFAULT '{}'")
   }
 
   private ensureColumn(table: string, column: string, definition: string): void {

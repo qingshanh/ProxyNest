@@ -49,6 +49,11 @@ type GithubTreeResponse = {
   tree?: GithubTreeItem[]
 }
 
+type ValidatedGithubCandidate = {
+  url: string
+  score: number
+}
+
 const defaultNodeFileNames = new Set([
   'all',
   'sub',
@@ -64,6 +69,12 @@ const defaultNodeFileNames = new Set([
 ])
 
 const defaultGithubQueries = [
+  'clash subscription',
+  'clash meta subscription',
+  'v2ray subscription',
+  'vless trojan subscription',
+  'mihomo subscription',
+  'proxy provider yaml',
   'free clash subscription',
   'free v2ray subscription',
   'clash nodes',
@@ -74,7 +85,7 @@ const defaultGithubQueries = [
 ]
 
 const nodePathPattern =
-  /(^|\/)(?:all|base64|clash|clash[-_]?meta|node|nodes|proxy|proxies|share|sub|subs|subscribe|subscription|v2ray|v2rayn|list|list_raw)(?:[-_.a-z0-9]*)?\.(?:txt|ya?ml)$/i
+  /(^|\/)(?:all|base64|clash|clash[-_]?meta|mihomo|node|nodes|proxy|proxies|provider|providers|share|sub|subs|subscribe|subscription|v2ray|v2rayn|list|list_raw)(?:[-_.a-z0-9]*)?\.(?:txt|json|ya?ml)$/i
 
 const ignoredPathPattern =
   /(^|\/)(?:readme|license|package-lock|pnpm-lock|yarn.lock|docker-compose|tsconfig|vite\.config|webpack\.config)(?:\.|$)/i
@@ -107,10 +118,18 @@ export class SubscriptionService {
     const dedupedBefore = this.dedupeSources()
     const types: Record<string, number> = {}
     const failed: Array<{ url: string; error: string }> = []
+    const seenInputUrls = new Set<string>()
+    const normalizedItems = items.filter((item) => {
+      const normalized = this.normalizeInputUrl(item.url)
+      if (seenInputUrls.has(normalized.url)) return false
+      seenInputUrls.add(normalized.url)
+      return true
+    })
+    const duplicateInputs = items.length - normalizedItems.length
     if (items.length > this.config.subscriptionMaxBatchItems) {
       throw new Error(`订阅批量导入数量超过上限 ${this.config.subscriptionMaxBatchItems} 条`)
     }
-    for (const item of items) {
+    for (const item of normalizedItems) {
       const normalized = this.normalizeInputUrl(item.url)
       if (rawNodes >= this.config.subscriptionMaxNodesPerBatch) {
         failed.push({
@@ -144,7 +163,7 @@ export class SubscriptionService {
     uniqueNodes = this.store.getAllNodes().length
     return {
       created,
-      dedupedSources: dedupedBefore.removed + dedupedAfter.removed,
+      dedupedSources: dedupedBefore.removed + dedupedAfter.removed + duplicateInputs,
       failed,
       stats: {
         rawNodes,
@@ -246,7 +265,7 @@ export class SubscriptionService {
     const freshCandidates = candidates.filter((url) => !existingRawUrls.has(url))
     const limitedCandidates = freshCandidates.slice(0, options.maxCandidates)
     const validated = options.validateCandidates
-      ? await this.validateGithubCandidates(limitedCandidates, proxyPrefix, options.concurrency, signal)
+      ? (await this.validateGithubCandidates(limitedCandidates, proxyPrefix, options.concurrency, signal)).map((item) => item.url)
       : limitedCandidates
     const toAdd = validated.slice(0, options.maxAdditions)
     const sources: SourceEntity[] = []
@@ -540,21 +559,23 @@ export class SubscriptionService {
     proxyPrefix: string,
     concurrency: number,
     signal?: AbortSignal
-  ): Promise<string[]> {
-    const valid: string[] = []
+  ): Promise<ValidatedGithubCandidate[]> {
+    const valid: ValidatedGithubCandidate[] = []
     await runLimited(rawUrls, concurrency, async (rawUrl) => {
       throwIfAborted(signal)
       const proxied = applyGithubRawProxy(rawUrl, proxyPrefix)
       try {
         const text = await this.fetchText(proxied, 15000, {}, signal)
-        const parsed = parseSubscriptionContent(text, 'github_probe', { maxNodes: 1 })
-        if (parsed.nodes.length > 0) valid.push(rawUrl)
+        const parsed = parseSubscriptionContent(text, 'github_probe', { maxNodes: 50 })
+        const diversity = Object.keys(parsed.typeSummary).length
+        const score = parsed.nodes.length * 10 + diversity * 20
+        if (parsed.nodes.length > 0) valid.push({ url: rawUrl, score })
       } catch {
         throwIfAborted(signal)
         // Ignore invalid candidates; the result summary reports only URLs that survived validation.
       }
     }, () => Boolean(signal?.aborted))
-    return valid
+    return valid.sort((a, b) => b.score - a.score)
   }
 
   private existingRawUrlSet(proxyPrefix: string): Set<string> {

@@ -23,12 +23,15 @@ export class ArtifactService {
 
   generateStandardArtifacts(perCountry = 2): void {
     const all = this.store.getExportNodes()
-    const alive = all.filter((node) => node.alive)
-    const speed = all
+    const suspicious = all.filter((node) => node.alive && node.security.risk === 'suspicious')
+    const exportable = all.filter((node) => node.security.risk !== 'suspicious')
+    const alive = exportable.filter((node) => node.alive)
+    const speed = exportable
       .filter((node) => node.speedQualified)
       .sort((a, b) => (b.speedBps ?? 0) - (a.speedBps ?? 0))
     this.generatePair('alive', '活跃节点', alive)
     this.generatePair('speed', '测速合格节点', speed)
+    this.generatePair('suspicious', 'HTTPS 瀹夊叏鍙枒鑺傜偣', suspicious)
     for (const platform of ['openai', 'youtube', 'netflix', 'disney'] as UnlockPlatform[]) {
       const nodes = alive.filter((node) => node.unlock[platform]?.available)
       this.generatePair(`platform/${platform}`, platformTitles[platform], nodes)
