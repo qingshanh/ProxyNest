@@ -454,11 +454,14 @@ class MihomoProbeEngine implements ProbeEngine {
         if (platform === 'openai') {
           const res = await runtime.fetchText(targetUrl, timeoutMs, signal)
           const region = /loc=([A-Z]{2})/.exec(res.text)?.[1]
-          const unavailable = /unsupported|blocked|not available in your country|unable to load site/i.test(res.text)
+          const unavailable = /unsupported|blocked|not available in your country|unable to load site|request blocked|sorry, you have been blocked|captcha/i.test(res.text)
+          const looksLikeChatGptPage =
+            /chatgpt|openai|auth0|__next/i.test(res.text) &&
+            !/ERR_CONNECTION_CLOSED|this site can'?t be reached|无法访问此页面/i.test(res.text)
           return {
-            available: res.status >= 200 && res.status < 500 && !unavailable,
+            available: res.status >= 200 && res.status < 400 && !unavailable && looksLikeChatGptPage,
             region,
-            detail: `HTTP ${res.status} ${targetUrl}${region ? ` ${region}` : ''}${unavailable ? ' unavailable' : ''}`,
+            detail: `HTTP ${res.status} ${targetUrl}${region ? ` ${region}` : ''}${unavailable ? ' unavailable' : ''}${looksLikeChatGptPage ? '' : ' unexpected-page'}`,
             checkedAt
           }
         }
@@ -664,6 +667,7 @@ class MihomoRuntime {
     try {
       const res = await undiciFetch(url, {
         dispatcher: agent,
+        headers: this.browserHeaders(),
         signal: withTimeoutSignal(timeoutMs, signal)
       })
       const text = await res.text()
