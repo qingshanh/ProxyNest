@@ -50,6 +50,10 @@ export function SettingsPage() {
 
   const [dedupeMode, setDedupeMode] = useState('endpoint')
   const [autoDeleteFailedFetches, setAutoDeleteFailedFetches] = useState(3)
+  const [openaiUnlockUrl, setOpenaiUnlockUrl] = useState('https://chatgpt.com/')
+  const [youtubeUnlockUrl, setYoutubeUnlockUrl] = useState('https://www.youtube.com/premium')
+  const [netflixUnlockUrl, setNetflixUnlockUrl] = useState('https://www.netflix.com/title/80018499')
+  const [disneyUnlockUrl, setDisneyUnlockUrl] = useState('https://www.disneyplus.com/')
 
   const [publicBaseUrl, setPublicBaseUrl] = useState('')
   const [runHistoryRetentionDays, setRunHistoryRetentionDays] = useState(30)
@@ -94,6 +98,10 @@ export function SettingsPage() {
       setUnlockConcurrency(data.concurrency.unlockRecommended)
       setDedupeMode(data.dedupe.defaultMode)
       setAutoDeleteFailedFetches(data.subscriptions.autoDeleteFailedFetches)
+      setOpenaiUnlockUrl(data.unlockTest.openai)
+      setYoutubeUnlockUrl(data.unlockTest.youtube)
+      setNetflixUnlockUrl(data.unlockTest.netflix)
+      setDisneyUnlockUrl(data.unlockTest.disney)
       setPublicBaseUrl(data.publicBaseUrl)
       setRunHistoryRetentionDays(data.schedule.runHistoryRetentionDays ?? 30)
       setScheduleTasks(mergeScheduleTasks(data.schedule.tasks))
@@ -160,7 +168,7 @@ export function SettingsPage() {
 
   const saveGeneral = async () => {
     setSaving(true)
-    try { await api.settings.patch({ publicBaseUrl, schedule: { runHistoryRetentionDays, tasks: scheduleTasks }, geoip: { mode: geoipMode, apiUrl: geoipApiUrl, databaseUrl: geoipDatabaseUrl, autoUpdate: geoipAutoUpdate, updateCron: geoipUpdateCron } }); showMsg('success', '设置已保存') }
+    try { await api.settings.patch({ publicBaseUrl, unlockTest: { openai: openaiUnlockUrl, youtube: youtubeUnlockUrl, netflix: netflixUnlockUrl, disney: disneyUnlockUrl }, schedule: { runHistoryRetentionDays, tasks: scheduleTasks }, geoip: { mode: geoipMode, apiUrl: geoipApiUrl, databaseUrl: geoipDatabaseUrl, autoUpdate: geoipAutoUpdate, updateCron: geoipUpdateCron } }); showMsg('success', '设置已保存') }
     catch (e) { showMsg('error', e instanceof Error ? e.message : '保存失败') }
     finally { setSaving(false) }
   }
@@ -324,6 +332,30 @@ export function SettingsPage() {
           <div className="form-group">
             <label>公开域名 (publicBaseUrl)</label>
             <input type="text" value={publicBaseUrl} onChange={(e) => setPublicBaseUrl(e.target.value)} placeholder="https://example.com" />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: '.85em', fontWeight: 500, color: 'var(--c-text-dim)', display: 'block', marginBottom: 8 }}>流媒体与解锁测试链接</label>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>OpenAI / ChatGPT</label>
+                <input type="text" value={openaiUnlockUrl} onChange={(e) => setOpenaiUnlockUrl(e.target.value)} placeholder="https://chatgpt.com/" />
+              </div>
+              <div className="form-group">
+                <label>YouTube</label>
+                <input type="text" value={youtubeUnlockUrl} onChange={(e) => setYoutubeUnlockUrl(e.target.value)} placeholder="https://www.youtube.com/premium" />
+              </div>
+              <div className="form-group">
+                <label>Netflix</label>
+                <input type="text" value={netflixUnlockUrl} onChange={(e) => setNetflixUnlockUrl(e.target.value)} placeholder="https://www.netflix.com/title/80018499" />
+              </div>
+              <div className="form-group">
+                <label>Disney+</label>
+                <input type="text" value={disneyUnlockUrl} onChange={(e) => setDisneyUnlockUrl(e.target.value)} placeholder="https://www.disneyplus.com/" />
+              </div>
+            </div>
+            <div style={{ color: 'var(--c-text-dim)', fontSize: '.78em', marginTop: 4, lineHeight: 1.5 }}>
+              默认 OpenAI 已改为 `chatgpt.com` 首页，更接近真实访问；如果你有更稳的测试页，也可以在这里自行替换。
+            </div>
           </div>
           {settings?.mihomo && (
             <div className={settings.mihomo.exists ? 'alert alert-success' : 'alert alert-error'}>

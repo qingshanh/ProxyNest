@@ -218,6 +218,10 @@ export class Store {
       settings.geoip = { ...this.defaultSettings().geoip, ...(settings.geoip as unknown as Record<string, unknown>) }
       changed = true
     }
+    if (!settings.unlockTest || typeof settings.unlockTest !== 'object') {
+      settings.unlockTest = this.defaultSettings().unlockTest
+      changed = true
+    }
     if (!('absoluteMinSpeedMBps' in (settings.reusablePool as unknown as Record<string, unknown>))) {
       settings.reusablePool.absoluteMinSpeedMBps = 1
       changed = true
@@ -235,6 +239,12 @@ export class Store {
       },
       subscriptions: {
         autoDeleteFailedFetches: 3
+      },
+      unlockTest: {
+        openai: 'https://chatgpt.com/',
+        youtube: 'https://www.youtube.com/premium',
+        netflix: 'https://www.netflix.com/title/80018499',
+        disney: 'https://www.disneyplus.com/'
       },
       geoip: {
         mode: 'local_with_api_fallback',
@@ -370,6 +380,10 @@ export class Store {
     if (!settings.reusablePool || typeof settings.reusablePool !== 'object') {
       settings.reusablePool = defaults.reusablePool
     }
+    if (!settings.unlockTest || typeof settings.unlockTest !== 'object') {
+      settings.unlockTest = defaults.unlockTest
+    }
+    settings.unlockTest = { ...defaults.unlockTest, ...settings.unlockTest }
     settings.geoip = { ...defaults.geoip, ...settings.geoip }
     settings.reusablePool = { ...defaults.reusablePool, ...settings.reusablePool }
     return settings
@@ -425,6 +439,14 @@ export class Store {
       next.github.discovery.maxAdditions = this.clampInt(next.github.discovery.maxAdditions, 1, 500, current.github.discovery.maxAdditions)
       next.github.discovery.concurrency = this.clampInt(next.github.discovery.concurrency, 1, 20, current.github.discovery.concurrency)
       next.github.tokenSet = Boolean(next.github.token)
+    }
+    if (patch.unlockTest && typeof patch.unlockTest === 'object') {
+      next.unlockTest = {
+        openai: this.cleanUrl(next.unlockTest.openai, current.unlockTest.openai),
+        youtube: this.cleanUrl(next.unlockTest.youtube, current.unlockTest.youtube),
+        netflix: this.cleanUrl(next.unlockTest.netflix, current.unlockTest.netflix),
+        disney: this.cleanUrl(next.unlockTest.disney, current.unlockTest.disney)
+      }
     }
     this.saveSettings(next)
     return next

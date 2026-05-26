@@ -133,7 +133,7 @@ const main = async (): Promise<void> => {
   const artifacts = new ArtifactService(store, config)
   const telegram = new TelegramService(store)
   const geoip = new GeoIpService(config)
-  const probe = createProbeEngine(config)
+  const probe = createProbeEngine(config, () => store.getSettings())
   const tasks = new TaskQueue({ store, subscriptions, artifacts, telegram, geoip, probe })
 
   const app = Fastify({

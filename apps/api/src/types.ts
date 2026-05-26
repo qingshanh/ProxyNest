@@ -223,6 +223,7 @@ export type AppSettings = {
   subscriptions: {
     autoDeleteFailedFetches: number
   }
+  unlockTest: Record<UnlockPlatform, string>
   geoip: {
     mode: 'local_with_api_fallback' | 'local_only' | 'api_only'
     apiUrl: string

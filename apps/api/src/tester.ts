@@ -6,7 +6,7 @@ import { fetch as undiciFetch, ProxyAgent } from 'undici'
 import YAML from 'yaml'
 import type { AppConfig } from './config'
 import { toClashProxy } from './codec'
-import type { NodeEntity, SecurityCheck, UnlockPlatform, UnlockResult } from './types'
+import type { AppSettings, NodeEntity, SecurityCheck, UnlockPlatform, UnlockResult } from './types'
 import { abortError, newId, nowIso, runLimited, throwIfAborted, withTimeoutSignal } from './utils'
 
 export type AliveProbe = {
@@ -47,8 +47,8 @@ export interface ProbeEngine {
   testUnlock(node: NodeEntity, platform: UnlockPlatform, timeoutMs: number, signal?: AbortSignal): Promise<UnlockResult>
 }
 
-export const createProbeEngine = (config: AppConfig): ProbeEngine => {
-  if (config.mihomoBin && fs.existsSync(config.mihomoBin)) return new MihomoProbeEngine(config)
+export const createProbeEngine = (config: AppConfig, getSettings: () => AppSettings): ProbeEngine => {
+  if (config.mihomoBin && fs.existsSync(config.mihomoBin)) return new MihomoProbeEngine(config, getSettings)
   return new TcpFallbackProbeEngine()
 }
 
@@ -208,7 +208,10 @@ class MihomoProbeEngine implements ProbeEngine {
 
   private portCursor = 0
 
-  constructor(private readonly config: AppConfig) {
+  constructor(
+    private readonly config: AppConfig,
+    private readonly getSettings: () => AppSettings
+  ) {
     fs.mkdirSync(config.mihomoDir, { recursive: true })
   }
 
@@ -445,42 +448,44 @@ class MihomoProbeEngine implements ProbeEngine {
   async testUnlock(node: NodeEntity, platform: UnlockPlatform, timeoutMs: number, signal?: AbortSignal): Promise<UnlockResult> {
     return this.withRuntime(node, timeoutMs, signal, async (runtime) => {
       const checkedAt = nowIso()
+      const settings = this.getSettings()
+      const targetUrl = settings.unlockTest[platform]
       try {
         if (platform === 'openai') {
-          const res = await runtime.fetchText('https://chatgpt.com/cdn-cgi/trace', timeoutMs, signal)
+          const res = await runtime.fetchText(targetUrl, timeoutMs, signal)
           const region = /loc=([A-Z]{2})/.exec(res.text)?.[1]
-          const unavailable = /unsupported|blocked/i.test(res.text)
+          const unavailable = /unsupported|blocked|not available in your country|unable to load site/i.test(res.text)
           return {
             available: res.status >= 200 && res.status < 500 && !unavailable,
             region,
-            detail: `HTTP ${res.status}${region ? ` ${region}` : ''}${unavailable ? ' unavailable' : ''}`,
+            detail: `HTTP ${res.status} ${targetUrl}${region ? ` ${region}` : ''}${unavailable ? ' unavailable' : ''}`,
             checkedAt
           }
         }
         if (platform === 'youtube') {
-          const res = await runtime.fetchText('https://www.youtube.com/premium', timeoutMs, signal)
+          const res = await runtime.fetchText(targetUrl, timeoutMs, signal)
           const blocked = /not available in your country|premium is not available/i.test(res.text)
           return {
             available: res.status >= 200 && res.status < 500 && !blocked,
-            detail: `HTTP ${res.status}${blocked ? ' blocked/unavailable' : ''}`,
+            detail: `HTTP ${res.status} ${targetUrl}${blocked ? ' blocked/unavailable' : ''}`,
             checkedAt
           }
         }
         if (platform === 'netflix') {
-          const res = await runtime.fetchText('https://www.netflix.com/title/80018499', timeoutMs, signal)
+          const res = await runtime.fetchText(targetUrl, timeoutMs, signal)
           const blocked = /not available|unavailable|blocked|proxy|vpn|unblocker|pardon the interruption/i.test(res.text)
           const limited = res.status === 404 || /watch free|netflix originals/i.test(res.text)
           return {
             available: res.status >= 200 && res.status < 500 && !blocked && !limited,
-            detail: `HTTP ${res.status}${blocked ? ' blocked/unavailable' : limited ? ' limited/catalog-only' : ''}`,
+            detail: `HTTP ${res.status} ${targetUrl}${blocked ? ' blocked/unavailable' : limited ? ' limited/catalog-only' : ''}`,
             checkedAt
           }
         }
-        const res = await runtime.fetchText('https://www.disneyplus.com/', timeoutMs, signal)
+        const res = await runtime.fetchText(targetUrl, timeoutMs, signal)
         const blocked = /not available|unavailable|not available in your region|unsupported location|service unavailable/i.test(res.text)
         return {
           available: res.status >= 200 && res.status < 500 && !blocked,
-          detail: `HTTP ${res.status}${blocked ? ' blocked/unavailable' : ''}`,
+          detail: `HTTP ${res.status} ${targetUrl}${blocked ? ' blocked/unavailable' : ''}`,
           checkedAt
         }
       } catch (error) {
