@@ -50,6 +50,9 @@ export function SettingsPage() {
 
   const [dedupeMode, setDedupeMode] = useState('endpoint')
   const [autoDeleteFailedFetches, setAutoDeleteFailedFetches] = useState(3)
+  const [aliveTimeoutMs, setAliveTimeoutMs] = useState(30000)
+  const [speedTimeoutMs, setSpeedTimeoutMs] = useState(30000)
+  const [unlockTimeoutMs, setUnlockTimeoutMs] = useState(30000)
   const [openaiUnlockUrl, setOpenaiUnlockUrl] = useState('https://chatgpt.com/')
   const [youtubeUnlockUrl, setYoutubeUnlockUrl] = useState('https://www.youtube.com/premium')
   const [netflixUnlockUrl, setNetflixUnlockUrl] = useState('https://www.netflix.com/title/80018499')
@@ -98,6 +101,9 @@ export function SettingsPage() {
       setUnlockConcurrency(data.concurrency.unlockRecommended)
       setDedupeMode(data.dedupe.defaultMode)
       setAutoDeleteFailedFetches(data.subscriptions.autoDeleteFailedFetches)
+      setAliveTimeoutMs(data.probeTimeouts.aliveMs)
+      setSpeedTimeoutMs(data.probeTimeouts.speedMs)
+      setUnlockTimeoutMs(data.probeTimeouts.unlockMs)
       setOpenaiUnlockUrl(data.unlockTest.openai)
       setYoutubeUnlockUrl(data.unlockTest.youtube)
       setNetflixUnlockUrl(data.unlockTest.netflix)
@@ -168,7 +174,7 @@ export function SettingsPage() {
 
   const saveGeneral = async () => {
     setSaving(true)
-    try { await api.settings.patch({ publicBaseUrl, unlockTest: { openai: openaiUnlockUrl, youtube: youtubeUnlockUrl, netflix: netflixUnlockUrl, disney: disneyUnlockUrl }, schedule: { runHistoryRetentionDays, tasks: scheduleTasks }, geoip: { mode: geoipMode, apiUrl: geoipApiUrl, databaseUrl: geoipDatabaseUrl, autoUpdate: geoipAutoUpdate, updateCron: geoipUpdateCron } }); showMsg('success', '设置已保存') }
+    try { await api.settings.patch({ publicBaseUrl, probeTimeouts: { aliveMs: aliveTimeoutMs, speedMs: speedTimeoutMs, unlockMs: unlockTimeoutMs }, unlockTest: { openai: openaiUnlockUrl, youtube: youtubeUnlockUrl, netflix: netflixUnlockUrl, disney: disneyUnlockUrl }, schedule: { runHistoryRetentionDays, tasks: scheduleTasks }, geoip: { mode: geoipMode, apiUrl: geoipApiUrl, databaseUrl: geoipDatabaseUrl, autoUpdate: geoipAutoUpdate, updateCron: geoipUpdateCron } }); showMsg('success', '设置已保存') }
     catch (e) { showMsg('error', e instanceof Error ? e.message : '保存失败') }
     finally { setSaving(false) }
   }
@@ -332,6 +338,26 @@ export function SettingsPage() {
           <div className="form-group">
             <label>公开域名 (publicBaseUrl)</label>
             <input type="text" value={publicBaseUrl} onChange={(e) => setPublicBaseUrl(e.target.value)} placeholder="https://example.com" />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: '.85em', fontWeight: 500, color: 'var(--c-text-dim)', display: 'block', marginBottom: 8 }}>各类测试超时 (ms)</label>
+            <div className="grid-3">
+              <div className="form-group">
+                <label>测活超时</label>
+                <input type="number" value={aliveTimeoutMs} onChange={(e) => setAliveTimeoutMs(Number(e.target.value))} />
+              </div>
+              <div className="form-group">
+                <label>测速超时</label>
+                <input type="number" value={speedTimeoutMs} onChange={(e) => setSpeedTimeoutMs(Number(e.target.value))} />
+              </div>
+              <div className="form-group">
+                <label>解锁超时</label>
+                <input type="number" value={unlockTimeoutMs} onChange={(e) => setUnlockTimeoutMs(Number(e.target.value))} />
+              </div>
+            </div>
+            <div style={{ color: 'var(--c-text-dim)', fontSize: '.78em', marginTop: 4, lineHeight: 1.5 }}>
+              默认统一为 30000 毫秒；任务中心和接口默认值都会读取这里。
+            </div>
           </div>
           <div style={{ marginBottom: 14 }}>
             <label style={{ fontSize: '.85em', fontWeight: 500, color: 'var(--c-text-dim)', display: 'block', marginBottom: 8 }}>流媒体与解锁测试链接</label>

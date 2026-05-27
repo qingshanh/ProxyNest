@@ -82,29 +82,30 @@ const buildDefaultFullParams = (store: Store, body: Record<string, unknown>): Fu
   const speedBody = (body.speed as Record<string, unknown> | undefined) ?? {}
   const unlockBody = (body.unlock as Record<string, unknown> | undefined) ?? {}
   const countryBackupBody = (body.countryBackup as Record<string, unknown> | undefined) ?? {}
+  const timeouts = settings.probeTimeouts
   return {
     scope: 'all',
     dedupeMode: settings.dedupe.defaultMode,
     alive: {
       enabled: true,
       concurrency: settings.concurrency.aliveRecommended,
-      timeoutMs: 8000,
+      timeoutMs: timeouts.aliveMs,
       ...aliveBody
     },
     speed: {
       enabled: true,
       concurrency: settings.concurrency.speedRecommended,
       minMBps: settings.reusablePool.minSpeedMBps,
-      targetCount: 50,
+      targetCount: 30,
       testUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
-      timeoutMs: 8000,
+      timeoutMs: timeouts.speedMs,
       ...speedBody
     },
     unlock: {
       enabled: true,
       platforms: ['openai', 'youtube', 'netflix', 'disney'],
       concurrency: settings.concurrency.unlockRecommended,
-      timeoutMs: 10000,
+      timeoutMs: timeouts.unlockMs,
       ...unlockBody
     },
     countryBackup: {
@@ -216,7 +217,7 @@ const main = async (): Promise<void> => {
           scope: 'pool',
           includeAllPool: true,
           concurrency: Math.min(20, settings.concurrency.aliveRecommended),
-          timeoutMs: 8000,
+          timeoutMs: settings.probeTimeouts.aliveMs,
           notifyTelegram
         }
       }
@@ -228,7 +229,7 @@ const main = async (): Promise<void> => {
           scope: 'alive',
           platforms: ['openai', 'youtube', 'netflix', 'disney'] as UnlockPlatform[],
           concurrency: settings.concurrency.unlockRecommended,
-          timeoutMs: 10000,
+          timeoutMs: settings.probeTimeouts.unlockMs,
           notifyTelegram
         }
       }
@@ -239,9 +240,9 @@ const main = async (): Promise<void> => {
         scope: 'alive',
         concurrency: settings.concurrency.speedRecommended,
         minMBps: settings.reusablePool.minSpeedMBps,
-        targetCount: 50,
+        targetCount: 30,
         testUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
-        timeoutMs: 8000,
+        timeoutMs: settings.probeTimeouts.speedMs,
         notifyTelegram
       }
     }
@@ -454,7 +455,7 @@ const main = async (): Promise<void> => {
       nodeIds: [params.id],
       scope: 'current',
       concurrency: 1,
-      timeoutMs: 8000,
+      timeoutMs: store.getSettings().probeTimeouts.aliveMs,
       notifyTelegram: notifyTelegramFor(store, 'pool_alive'),
       ...bodyOrEmpty(request)
     }, { priority: 'high' })
@@ -472,7 +473,7 @@ const main = async (): Promise<void> => {
       minMBps: settings.reusablePool.minSpeedMBps,
       targetCount: 1,
       testUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
-      timeoutMs: 8000,
+      timeoutMs: settings.probeTimeouts.speedMs,
       notifyTelegram: notifyTelegramFor(store, 'speed'),
       ...bodyOrEmpty(request)
     }, { priority: 'high' })
@@ -560,7 +561,7 @@ const main = async (): Promise<void> => {
       poolIds: [params.id],
       includeAllPool: true,
       concurrency: Math.min(10, settings.concurrency.aliveRecommended),
-      timeoutMs: 8000,
+      timeoutMs: settings.probeTimeouts.aliveMs,
       notifyTelegram: notifyTelegramFor(store, 'pool_alive'),
       ...bodyOrEmpty(request)
     }, { priority: 'high' })
@@ -596,7 +597,7 @@ const main = async (): Promise<void> => {
     const body = {
       scope: 'all',
       concurrency: settings.concurrency.aliveRecommended,
-      timeoutMs: 8000,
+      timeoutMs: settings.probeTimeouts.aliveMs,
       notifyTelegram: notifyTelegramFor(store, 'pool_alive'),
       ...bodyOrEmpty(request)
     }
@@ -610,9 +611,9 @@ const main = async (): Promise<void> => {
       scope: 'alive',
       concurrency: settings.concurrency.speedRecommended,
       minMBps: settings.reusablePool.minSpeedMBps,
-      targetCount: 50,
+      targetCount: 30,
       testUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
-      timeoutMs: 8000,
+      timeoutMs: settings.probeTimeouts.speedMs,
       notifyTelegram: notifyTelegramFor(store, 'speed'),
       ...bodyOrEmpty(request)
     }
@@ -626,7 +627,7 @@ const main = async (): Promise<void> => {
       scope: 'alive',
       platforms: ['openai', 'youtube', 'netflix', 'disney'] as UnlockPlatform[],
       concurrency: settings.concurrency.unlockRecommended,
-      timeoutMs: 10000,
+      timeoutMs: settings.probeTimeouts.unlockMs,
       notifyTelegram: notifyTelegramFor(store, 'unlock'),
       ...bodyOrEmpty(request)
     }

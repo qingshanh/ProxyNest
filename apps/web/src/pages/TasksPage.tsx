@@ -8,17 +8,17 @@ const taskConfigKey = 'proxynest_task_config_v1'
 const defaultFullParams = {
   dedupeMode: 'endpoint' as string,
   aliveConcurrency: 300,
-  aliveTimeoutMs: 8000,
+  aliveTimeoutMs: 30000,
   speedEnabled: true,
   speedConcurrency: 4,
   speedMinMBps: 3,
   speedTargetCount: 50,
   speedTestUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
-  speedTimeoutMs: 8000,
+  speedTimeoutMs: 30000,
   unlockEnabled: true,
   unlockPlatforms: ['openai', 'youtube', 'netflix', 'disney'] as UnlockPlatform[],
   unlockConcurrency: 40,
-  unlockTimeoutMs: 10000,
+  unlockTimeoutMs: 30000,
   countryBackupEnabled: true,
   countryPerCountry: 2,
   notifyTelegram: true
@@ -26,15 +26,15 @@ const defaultFullParams = {
 
 const defaultStandaloneParams = {
   aliveConcurrency: 300,
-  aliveTimeoutMs: 8000,
+  aliveTimeoutMs: 30000,
   speedConcurrency: 4,
   speedMinMBps: 3,
   speedTargetCount: 50,
   speedTestUrl: 'https://speed.cloudflare.com/__down?bytes=1048576',
-  speedTimeoutMs: 8000,
+  speedTimeoutMs: 30000,
   unlockPlatforms: ['openai', 'youtube', 'netflix', 'disney'] as UnlockPlatform[],
   unlockConcurrency: 40,
-  unlockTimeoutMs: 10000
+  unlockTimeoutMs: 30000
 }
 
 const loadSavedTaskConfig = () => {
@@ -65,16 +65,22 @@ const taskDefaultsFromSettings = (settings: AppSettings) => ({
     ...defaultFullParams,
     dedupeMode: settings.dedupe.defaultMode,
     aliveConcurrency: settings.concurrency.aliveRecommended,
+    aliveTimeoutMs: settings.probeTimeouts.aliveMs,
     speedConcurrency: settings.concurrency.speedRecommended,
     speedMinMBps: settings.reusablePool.minSpeedMBps,
-    unlockConcurrency: settings.concurrency.unlockRecommended
+    speedTimeoutMs: settings.probeTimeouts.speedMs,
+    unlockConcurrency: settings.concurrency.unlockRecommended,
+    unlockTimeoutMs: settings.probeTimeouts.unlockMs
   },
   standaloneParams: {
     ...defaultStandaloneParams,
     aliveConcurrency: settings.concurrency.aliveRecommended,
+    aliveTimeoutMs: settings.probeTimeouts.aliveMs,
     speedConcurrency: settings.concurrency.speedRecommended,
     speedMinMBps: settings.reusablePool.minSpeedMBps,
-    unlockConcurrency: settings.concurrency.unlockRecommended
+    speedTimeoutMs: settings.probeTimeouts.speedMs,
+    unlockConcurrency: settings.concurrency.unlockRecommended,
+    unlockTimeoutMs: settings.probeTimeouts.unlockMs
   }
 })
 
@@ -476,8 +482,16 @@ export function TasksPage() {
               <input type="number" value={fullParams.aliveConcurrency} onChange={(e) => setFullParams({ ...fullParams, aliveConcurrency: Number(e.target.value) })} />
             </div>
             <div className="form-group">
+              <label>测活超时 ms</label>
+              <input type="number" value={fullParams.aliveTimeoutMs} onChange={(e) => setFullParams({ ...fullParams, aliveTimeoutMs: Number(e.target.value) })} />
+            </div>
+            <div className="form-group">
               <label>测速并发</label>
               <input type="number" value={fullParams.speedConcurrency} onChange={(e) => setFullParams({ ...fullParams, speedConcurrency: Number(e.target.value) })} />
+            </div>
+            <div className="form-group">
+              <label>测速超时 ms</label>
+              <input type="number" value={fullParams.speedTimeoutMs} onChange={(e) => setFullParams({ ...fullParams, speedTimeoutMs: Number(e.target.value) })} />
             </div>
             <div className="form-group">
               <label>最低速度 MB/s</label>
@@ -490,6 +504,10 @@ export function TasksPage() {
             <div className="form-group">
               <label>解锁并发</label>
               <input type="number" value={fullParams.unlockConcurrency} onChange={(e) => setFullParams({ ...fullParams, unlockConcurrency: Number(e.target.value) })} />
+            </div>
+            <div className="form-group">
+              <label>解锁超时 ms</label>
+              <input type="number" value={fullParams.unlockTimeoutMs} onChange={(e) => setFullParams({ ...fullParams, unlockTimeoutMs: Number(e.target.value) })} />
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -518,6 +536,10 @@ export function TasksPage() {
               <input type="number" value={standaloneParams.speedConcurrency} onChange={(e) => setStandaloneParams({ ...standaloneParams, speedConcurrency: Number(e.target.value) })} />
             </div>
             <div className="form-group">
+              <label>测速超时 ms</label>
+              <input type="number" value={standaloneParams.speedTimeoutMs} onChange={(e) => setStandaloneParams({ ...standaloneParams, speedTimeoutMs: Number(e.target.value) })} />
+            </div>
+            <div className="form-group">
               <label>最低速度 MB/s</label>
               <input type="number" value={standaloneParams.speedMinMBps} onChange={(e) => setStandaloneParams({ ...standaloneParams, speedMinMBps: Number(e.target.value) })} />
             </div>
@@ -528,6 +550,10 @@ export function TasksPage() {
             <div className="form-group">
               <label>解锁并发</label>
               <input type="number" value={standaloneParams.unlockConcurrency} onChange={(e) => setStandaloneParams({ ...standaloneParams, unlockConcurrency: Number(e.target.value) })} />
+            </div>
+            <div className="form-group">
+              <label>解锁超时 ms</label>
+              <input type="number" value={standaloneParams.unlockTimeoutMs} onChange={(e) => setStandaloneParams({ ...standaloneParams, unlockTimeoutMs: Number(e.target.value) })} />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>

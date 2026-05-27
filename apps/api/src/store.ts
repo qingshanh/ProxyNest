@@ -224,6 +224,10 @@ export class Store {
       settings.unlockTest = this.defaultSettings().unlockTest
       changed = true
     }
+    if (!settings.probeTimeouts || typeof settings.probeTimeouts !== 'object') {
+      settings.probeTimeouts = this.defaultSettings().probeTimeouts
+      changed = true
+    }
     if (!('absoluteMinSpeedMBps' in (settings.reusablePool as unknown as Record<string, unknown>))) {
       settings.reusablePool.absoluteMinSpeedMBps = 1
       changed = true
@@ -241,6 +245,11 @@ export class Store {
       },
       subscriptions: {
         autoDeleteFailedFetches: 3
+      },
+      probeTimeouts: {
+        aliveMs: 30000,
+        speedMs: 30000,
+        unlockMs: 30000
       },
       unlockTest: {
         openai: 'https://chatgpt.com/',
@@ -382,6 +391,10 @@ export class Store {
     if (!settings.reusablePool || typeof settings.reusablePool !== 'object') {
       settings.reusablePool = defaults.reusablePool
     }
+    if (!settings.probeTimeouts || typeof settings.probeTimeouts !== 'object') {
+      settings.probeTimeouts = defaults.probeTimeouts
+    }
+    settings.probeTimeouts = { ...defaults.probeTimeouts, ...settings.probeTimeouts }
     if (!settings.unlockTest || typeof settings.unlockTest !== 'object') {
       settings.unlockTest = defaults.unlockTest
     }
@@ -448,6 +461,13 @@ export class Store {
         youtube: this.cleanUrl(next.unlockTest.youtube, current.unlockTest.youtube),
         netflix: this.cleanUrl(next.unlockTest.netflix, current.unlockTest.netflix),
         disney: this.cleanUrl(next.unlockTest.disney, current.unlockTest.disney)
+      }
+    }
+    if (patch.probeTimeouts && typeof patch.probeTimeouts === 'object') {
+      next.probeTimeouts = {
+        aliveMs: this.clampInt(next.probeTimeouts.aliveMs, 1000, 300000, current.probeTimeouts.aliveMs),
+        speedMs: this.clampInt(next.probeTimeouts.speedMs, 1000, 300000, current.probeTimeouts.speedMs),
+        unlockMs: this.clampInt(next.probeTimeouts.unlockMs, 1000, 300000, current.probeTimeouts.unlockMs)
       }
     }
     this.saveSettings(next)

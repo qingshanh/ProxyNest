@@ -321,7 +321,7 @@ export class TaskQueue {
 
   private async runAlive(runId: string, params: Record<string, unknown>): Promise<ProbeCandidate[]> {
     const requestedConcurrency = Number(params.concurrency ?? 100)
-    const timeoutMs = Number(params.timeoutMs ?? 8000)
+    const timeoutMs = Number(params.timeoutMs ?? 30000)
     const nodeIds = this.stringSetParam(params.nodeIds)
     const poolIds = this.stringSetParam(params.poolIds)
     const hasTargetFilter = nodeIds.size > 0 || poolIds.size > 0
@@ -444,15 +444,15 @@ export class TaskQueue {
     params: Record<string, unknown>,
     candidates?: ProbeCandidate[]
   ): Promise<ProbeCandidate[]> {
-    const concurrency = Number(params.concurrency ?? 8)
-    const timeoutMs = Number(params.timeoutMs ?? 8000)
+    const concurrency = Number(params.concurrency ?? 12)
+    const timeoutMs = Number(params.timeoutMs ?? 30000)
     const minMBps = Number(params.minMBps ?? 3)
-    const targetCount = Number(params.targetCount ?? 50)
+    const targetCount = Number(params.targetCount ?? 30)
     const testUrl = String(params.testUrl ?? 'https://speed.cloudflare.com/__down?bytes=1048576')
     const nodeIds = this.stringSetParam(params.nodeIds)
     const poolIds = this.stringSetParam(params.poolIds)
     const hasTargetFilter = nodeIds.size > 0 || poolIds.size > 0
-    const nodes = (candidates ?? this.getCandidatesForParams(params, !hasTargetFilter))
+    const rankedNodes = (candidates ?? this.getCandidatesForParams(params, !hasTargetFilter))
       .filter((candidate) => {
         if (!hasTargetFilter && !candidate.node.alive) return false
         if (!hasTargetFilter) return true
@@ -460,6 +460,8 @@ export class TaskQueue {
         return Boolean(candidate.poolId && poolIds.has(candidate.poolId))
       })
       .sort((a, b) => this.speedCandidateScore(b) - this.speedCandidateScore(a))
+    const maxCandidates = hasTargetFilter ? rankedNodes.length : Math.min(rankedNodes.length, Math.max(targetCount * 4, 120))
+    const nodes = rankedNodes.slice(0, maxCandidates)
     if (!nodes.length) {
       throw new Error('没有可测速的存活节点，请先运行测活并确认至少一个节点存活')
     }
@@ -478,7 +480,6 @@ export class TaskQueue {
       this.updateCandidateProbe(candidate, {
         speedBps: result.bps,
         speedQualified: ok,
-        security: result.security,
         lastTestedAt: nowIso()
       })
       this.finishProgressNode(runId, candidate, 'speed', ok ? 'success' : 'failed', {
@@ -555,7 +556,7 @@ export class TaskQueue {
     candidates?: ProbeCandidate[]
   ): Promise<void> {
     const concurrency = Number(params.concurrency ?? 40)
-    const timeoutMs = Number(params.timeoutMs ?? 10000)
+    const timeoutMs = Number(params.timeoutMs ?? 30000)
     const platforms = (params.platforms as UnlockPlatform[] | undefined) ?? ['openai', 'youtube', 'netflix', 'disney']
     const nodes = (candidates ?? this.getCandidatesForParams(params, true)).filter(
       (candidate) => candidate.node.alive

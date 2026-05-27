@@ -1,4 +1,4 @@
-import fs from 'node:fs'
+﻿import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
@@ -348,12 +348,10 @@ class MihomoProbeEngine implements ProbeEngine {
     return this.withRuntime(node, timeoutMs, signal, async (runtime) => {
       const started = Date.now()
       const bytes = await runtime.downloadBytes(testUrl, timeoutMs, signal)
-      const security = await runtime.checkHttpsSecurity(timeoutMs, signal)
       const seconds = Math.max(0.001, (Date.now() - started) / 1000)
       return {
         bps: Math.round(bytes / seconds),
-        detail: 'mihomo',
-        security
+        detail: 'mihomo'
       }
     })
   }
@@ -369,7 +367,7 @@ class MihomoProbeEngine implements ProbeEngine {
     shouldStop?: () => boolean
   ): Promise<void> {
     if (!nodes.length) return
-    const workerCount = Math.max(1, Math.min(16, Math.max(1, concurrency), nodes.length))
+    const workerCount = Math.max(1, Math.min(24, Math.max(1, concurrency), nodes.length))
     const chunks = this.distribute(nodes, workerCount)
     await runLimited(chunks, chunks.length, async (chunk) => {
       await this.testSpeedChunk(chunk, testUrl, timeoutMs, signal, onResult, onActive, shouldStop)
@@ -422,12 +420,10 @@ class MihomoProbeEngine implements ProbeEngine {
           await runtime.select(node.id, timeoutMs, signal)
           const started = Date.now()
           const bytes = await runtime.downloadBytes(testUrl, timeoutMs, signal)
-          const security = await runtime.checkHttpsSecurity(timeoutMs, signal)
           const seconds = Math.max(0.001, (Date.now() - started) / 1000)
           await onResult(node, {
             bps: Math.round(bytes / seconds),
-            detail: 'mihomo batch speed',
-            security
+            detail: 'mihomo batch speed'
           })
         } catch (error) {
           if (isAbortError(error)) throw error
@@ -454,14 +450,17 @@ class MihomoProbeEngine implements ProbeEngine {
         if (platform === 'openai') {
           const res = await runtime.fetchText(targetUrl, timeoutMs, signal)
           const region = /loc=([A-Z]{2})/.exec(res.text)?.[1]
-          const unavailable = /unsupported|blocked|not available in your country|unable to load site|request blocked|sorry, you have been blocked|captcha/i.test(res.text)
-          const looksLikeChatGptPage =
-            /chatgpt|openai|auth0|__next/i.test(res.text) &&
-            !/ERR_CONNECTION_CLOSED|this site can'?t be reached|无法访问此页面/i.test(res.text)
+          const hardFailure = /unsupported|not available in your country|unable to load site|ERR_CONNECTION_CLOSED|this site can'?t be reached|鏃犳硶璁块棶姝ら〉闈?/i.test(res.text)
+          const cloudflareChallenge = /cloudflare|cf-chl|challenge-platform|turnstile|checking your browser/i.test(res.text)
+          const looksLikeChatGptPage = /chatgpt|openai|auth0|__next|challenge-platform|cf-wrapper/i.test(res.text)
+          const available =
+            !hardFailure &&
+            ((res.status >= 200 && res.status < 400 && (looksLikeChatGptPage || cloudflareChallenge)) ||
+             (res.status === 403 && cloudflareChallenge))
           return {
-            available: res.status >= 200 && res.status < 400 && !unavailable && looksLikeChatGptPage,
+            available,
             region,
-            detail: `HTTP ${res.status} ${targetUrl}${region ? ` ${region}` : ''}${unavailable ? ' unavailable' : ''}${looksLikeChatGptPage ? '' : ' unexpected-page'}`,
+            detail: `HTTP ${res.status} ${targetUrl}${region ? ` ${region}` : ''}${hardFailure ? ' hard-failure' : cloudflareChallenge ? ' cf-challenge' : looksLikeChatGptPage ? ' ok-page' : ' unexpected-page'}`, 
             checkedAt
           }
         }

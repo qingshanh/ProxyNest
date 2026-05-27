@@ -170,6 +170,11 @@ export type AppSettings = {
   auth: { sessionTtlDays: number }
   dedupe: { defaultMode: DedupeMode }
   subscriptions: { autoDeleteFailedFetches: number }
+  probeTimeouts: {
+    aliveMs: number
+    speedMs: number
+    unlockMs: number
+  }
   unlockTest: Record<UnlockPlatform, string>
   geoip: {
     mode: 'local_with_api_fallback' | 'local_only' | 'api_only'
