@@ -258,3 +258,14 @@ export type GithubDiscoveryResult = {
   sources: SourceEntity[]
   sourceDedupe?: { before: number; after: number; removed: number }
 }
+
+export type DirectoryDiscoveryResult = {
+  searchedPages: number
+  candidateUrls: number
+  validUrls: number
+  added: number
+  skippedExisting: number
+  failed: Array<{ url: string; error: string }>
+  sources: SourceEntity[]
+  sourceDedupe?: { before: number; after: number; removed: number }
+}

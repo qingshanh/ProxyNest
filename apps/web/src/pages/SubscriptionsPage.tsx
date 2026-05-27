@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
-import type { DedupeMode, GithubDiscoveryResult, SourceEntity } from '../types'
+import type { DedupeMode, DirectoryDiscoveryResult, GithubDiscoveryResult, SourceEntity } from '../types'
 
 export function SubscriptionsPage() {
   const [sources, setSources] = useState<SourceEntity[]>([])
@@ -12,7 +12,9 @@ export function SubscriptionsPage() {
   const [addResult, setAddResult] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [discovering, setDiscovering] = useState(false)
+  const [discoveringDirectory, setDiscoveringDirectory] = useState(false)
   const [discoverResult, setDiscoverResult] = useState<GithubDiscoveryResult | null>(null)
+  const [directoryDiscoverResult, setDirectoryDiscoverResult] = useState<DirectoryDiscoveryResult | null>(null)
   const [copiedSourceId, setCopiedSourceId] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
@@ -81,6 +83,21 @@ export function SubscriptionsPage() {
       alert(e instanceof Error ? e.message : 'GitHub 发现失败')
     } finally {
       setDiscovering(false)
+    }
+  }
+
+  const handleDirectoryDiscover = async () => {
+    if (!confirm('将从已内置的订阅目录站提取公开订阅链接并验证可用性，继续吗？')) return
+    setDiscoveringDirectory(true)
+    setDirectoryDiscoverResult(null)
+    try {
+      const result = await api.subscriptions.discoverDirectory()
+      setDirectoryDiscoverResult(result)
+      await fetch()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '精选源发现失败')
+    } finally {
+      setDiscoveringDirectory(false)
     }
   }
 
@@ -230,6 +247,9 @@ export function SubscriptionsPage() {
           <button className="btn btn-ghost" onClick={handleDiscover} disabled={discovering}>
             {discovering ? '搜索中...' : 'GitHub 发现'}
           </button>
+          <button className="btn btn-ghost" onClick={handleDirectoryDiscover} disabled={discoveringDirectory}>
+            {discoveringDirectory ? '提取中...' : '精选源发现'}
+          </button>
           <button className="btn btn-ghost" onClick={handleRefreshAll} disabled={refreshing}>
             {refreshing ? '刷新中...' : '全部刷新'}
           </button>
@@ -257,6 +277,26 @@ export function SubscriptionsPage() {
           )}
           <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }}
                   onClick={() => setDiscoverResult(null)}>关闭</button>
+        </div>
+      )}
+
+      {directoryDiscoverResult && (
+        <div className="card" style={{ marginBottom: 20, borderColor: directoryDiscoverResult.failed.length ? 'var(--c-warning)' : 'var(--c-success)' }}>
+          <div className="card-header">精选源发现结果</div>
+          <div className="grid-3" style={{ fontSize: '.9em' }}>
+            <div>搜索页面: <strong>{directoryDiscoverResult.searchedPages}</strong></div>
+            <div>候选 URL: <strong>{directoryDiscoverResult.candidateUrls}</strong></div>
+            <div>验证通过: <strong>{directoryDiscoverResult.validUrls}</strong></div>
+            <div>成功添加: <strong style={{ color: 'var(--c-success)' }}>{directoryDiscoverResult.added}</strong></div>
+            <div>跳过已存在: <strong>{directoryDiscoverResult.skippedExisting}</strong></div>
+            <div>失败: <strong style={{ color: 'var(--c-danger)' }}>{directoryDiscoverResult.failed.length}</strong></div>
+          </div>
+          {directoryDiscoverResult.failed.length > 0 && (
+            <div className="alert alert-error" style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>
+              {directoryDiscoverResult.failed.slice(0, 5).map((item) => `${item.url}: ${item.error}`).join('\n')}
+            </div>
+          )}
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => setDirectoryDiscoverResult(null)}>关闭</button>
         </div>
       )}
 

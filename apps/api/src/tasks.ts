@@ -299,6 +299,11 @@ export class TaskQueue {
 
   private async runFetch(runId: string): Promise<void> {
     const settings = this.services.store.getSettings()
+    await this.pausePoint(runId)
+    this.progress(runId, 'running', 'discover', 0, settings.github.discovery.enabled ? 2 : 1, '探索精选订阅源')
+    const curatedDiscover = await this.services.subscriptions.discoverDirectorySources(this.signal(runId))
+    this.patchStats(runId, { curatedDiscover })
+    this.progress(runId, 'running', 'discover', 1, settings.github.discovery.enabled ? 2 : 1, '精选订阅源探索完成', curatedDiscover)
     if (settings.github.discovery.enabled) {
       await this.pausePoint(runId)
       this.progress(runId, 'running', 'discover', 0, 1, '搜索 GitHub 免费订阅')
@@ -709,6 +714,7 @@ export class TaskQueue {
   private speedCandidateScore(candidate: ProbeCandidate): number {
     const node = candidate.node
     const unlockCount = Object.values(node.unlock).filter((item) => item?.available).length
+    const risk = node.security?.risk ?? 'unknown'
     return (
       (candidate.origin === 'pool' ? 1200 : 0) +
       (node.speedQualified ? 900 : 0) +
@@ -716,7 +722,7 @@ export class TaskQueue {
       unlockCount * 160 +
       Math.max(0, 1000 - (node.latencyMs ?? 1000)) +
       node.sourceIds.length * 8 -
-      (node.security.risk === 'suspicious' ? 100000 : 0)
+      (risk === 'suspicious' ? 100000 : 0)
     )
   }
 

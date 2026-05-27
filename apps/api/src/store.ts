@@ -73,6 +73,8 @@ type ReuseDecision = {
   removeFromPool?: boolean
 }
 
+const securityRiskOf = (node: Partial<NodeEntity> | null | undefined): string => node?.security?.risk ?? 'unknown'
+
 const deepMerge = <T extends Record<string, unknown>>(base: T, patch: Record<string, unknown>): T => {
   const out: Record<string, unknown> = { ...base }
   for (const [key, value] of Object.entries(patch)) {
@@ -841,7 +843,7 @@ export class Store {
       .all<PoolRow>('SELECT * FROM node_pool WHERE keep_for_reprobe = 1 ORDER BY quality_score DESC, updated_at DESC')
       .map((row) => this.mapReusableNode(row))
       .filter((item) => item.alive)
-      .filter((item) => item.security.risk !== 'suspicious')
+      .filter((item) => securityRiskOf(item) !== 'suspicious')
   }
 
   getReusableNode(id: string): ReusableNodeEntity | null {
@@ -1158,7 +1160,7 @@ export class Store {
     const speedMBps = node.speedMBps ?? 0
     const latency = node.latencyMs ?? 9999
     const alive = node.alive
-    const suspicious = node.security.risk === 'suspicious'
+    const suspicious = securityRiskOf(node) === 'suspicious'
     const speedMeasured = node.speedBps != null
     const speedFloorOk = !speedMeasured || speedMBps >= settings.absoluteMinSpeedMBps
     const speedOk = !suspicious && speedFloorOk && (node.speedQualified || speedMBps >= settings.minSpeedMBps)
@@ -1838,7 +1840,7 @@ export class Store {
 
   private pickBetterNode(a: NodeEntity, b: NodeEntity): NodeEntity {
     const score = (node: NodeEntity): number => {
-      const securityPenalty = node.security.risk === 'suspicious' ? 100000 : 0
+      const securityPenalty = securityRiskOf(node) === 'suspicious' ? 100000 : 0
       return (
         (node.alive ? 10000 : 0) +
         (node.speedBps ?? 0) / 1024 / 1024 +

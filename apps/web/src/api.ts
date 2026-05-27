@@ -5,6 +5,7 @@ import type {
   DashboardSummary,
   DedupeMode,
   FullRunParams,
+  DirectoryDiscoveryResult,
   GithubDiscoveryResult,
   NodeEntity,
   PageResult,
@@ -147,6 +148,10 @@ class ApiClient {
       this.request<GithubDiscoveryResult>('/api/subscriptions/discover-github', {
         method: 'POST',
         body: JSON.stringify(params)
+      }),
+    discoverDirectory: () =>
+      this.request<DirectoryDiscoveryResult>('/api/subscriptions/discover-directory', {
+        method: 'POST'
       })
   }
 

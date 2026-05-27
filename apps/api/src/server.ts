@@ -403,6 +403,11 @@ const main = async (): Promise<void> => {
     return sendOk(reply, result)
   })
 
+  app.post('/api/subscriptions/discover-directory', async (_request, reply) => {
+    const result = await subscriptions.discoverDirectorySources()
+    return sendOk(reply, result)
+  })
+
   app.get('/api/nodes', async (request, reply) => {
     const query = z.object({
       alive: z.enum(['true', 'false']).optional(),

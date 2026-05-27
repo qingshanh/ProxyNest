@@ -23,8 +23,8 @@ export class ArtifactService {
 
   generateStandardArtifacts(perCountry = 2): void {
     const all = this.store.getExportNodes()
-    const suspicious = all.filter((node) => node.alive && node.security.risk === 'suspicious')
-    const exportable = all.filter((node) => node.security.risk !== 'suspicious')
+    const suspicious = all.filter((node) => node.alive && (node.security?.risk ?? 'unknown') === 'suspicious')
+    const exportable = all.filter((node) => (node.security?.risk ?? 'unknown') !== 'suspicious')
     const alive = exportable.filter((node) => node.alive)
     const speed = exportable
       .filter((node) => node.speedQualified)

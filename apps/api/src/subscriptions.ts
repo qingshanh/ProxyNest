@@ -2,7 +2,7 @@ import { TextDecoder } from 'node:util'
 import type { AppConfig } from './config'
 import type { Store } from './store'
 import { parseSubscriptionContent } from './codec'
-import type { DedupeMode, GithubDiscoveryResult, NormalizedNode, SourceEntity } from './types'
+import type { DedupeMode, DirectoryDiscoveryResult, GithubDiscoveryResult, NormalizedNode, SourceEntity } from './types'
 import { newId, runLimited, sha256, throwIfAborted, withTimeoutSignal } from './utils'
 import {
   applyGithubRawProxy,
@@ -54,6 +54,13 @@ type ValidatedGithubCandidate = {
   score: number
 }
 
+type CuratedSourceSeed = {
+  id: string
+  name: string
+  url: string
+  sourceUrl: string
+}
+
 const defaultNodeFileNames = new Set([
   'all',
   'sub',
@@ -89,6 +96,27 @@ const nodePathPattern =
 
 const ignoredPathPattern =
   /(^|\/)(?:readme|license|package-lock|pnpm-lock|yarn.lock|docker-compose|tsconfig|vite\.config|webpack\.config)(?:\.|$)/i
+
+const curatedSourceSeeds: CuratedSourceSeed[] = [
+  {
+    id: 'anaer_sub',
+    name: 'Anaer Sub',
+    url: 'https://anaer.github.io/Sub/clash.yaml',
+    sourceUrl: 'https://github.com/anaer/Sub'
+  },
+  {
+    id: 'au1rxx_subscriptions',
+    name: 'Au1rxx Free VPN Subscriptions',
+    url: 'https://github.com/Au1rxx/free-vpn-subscriptions/raw/main/output/clash.yaml',
+    sourceUrl: 'https://github.com/Au1rxx/free-vpn-subscriptions'
+  },
+  {
+    id: 'ermaozi_subscribe',
+    name: 'Ermaozi Subscribe',
+    url: 'https://github.com/ermaozi/get_subscribe/raw/refs/heads/main/subscribe/clash.yml',
+    sourceUrl: 'https://github.com/ermaozi/get_subscribe'
+  }
+]
 
 const formatBytes = (bytes: number): string => {
   if (bytes >= 1024 * 1024) return `${Math.round((bytes / 1024 / 1024) * 10) / 10} MB`
@@ -296,6 +324,67 @@ export class SubscriptionService {
       validUrls: validated.length,
       added: sources.length,
       skippedExisting: candidates.length - freshCandidates.length,
+      failed,
+      sources,
+      sourceDedupe: {
+        before: sourceDedupe.before,
+        after: sourceDedupeAfter.after,
+        removed: sourceDedupe.removed + sourceDedupeAfter.removed
+      }
+    }
+  }
+
+  async discoverDirectorySources(signal?: AbortSignal): Promise<DirectoryDiscoveryResult> {
+    throwIfAborted(signal)
+    const sourceDedupe = this.dedupeSources()
+    const existingUrls = new Set(this.store.listSources().map((source) => source.url.trim().toLowerCase()))
+    const failed: Array<{ url: string; error: string }> = []
+    const candidates = curatedSourceSeeds
+      .map((seed) => ({ ...seed, normalizedUrl: this.normalizeInputUrl(seed.url).url }))
+      .filter((seed) => !existingUrls.has(seed.normalizedUrl.toLowerCase()))
+
+    const validated: Array<(CuratedSourceSeed & { normalizedUrl: string })> = []
+
+    await runLimited(candidates, Math.min(6, Math.max(1, candidates.length)), async (candidate) => {
+      throwIfAborted(signal)
+      try {
+        const text = await this.fetchText(candidate.normalizedUrl, 15000, {}, signal)
+        const parsed = parseSubscriptionContent(text, 'directory_probe', { maxNodes: 50 })
+        if (parsed.nodes.length > 0) validated.push(candidate)
+      } catch (error) {
+        throwIfAborted(signal)
+        failed.push({
+          url: candidate.normalizedUrl,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }, () => Boolean(signal?.aborted))
+
+    const sources: SourceEntity[] = []
+    for (const candidate of validated) {
+      throwIfAborted(signal)
+      try {
+        const source = await this.refreshUrl(candidate.normalizedUrl, `${candidate.name}: ${this.shortSourceLabel(candidate.normalizedUrl)}`, {
+          originalUrl: candidate.sourceUrl,
+          discoveredBy: `curated:${candidate.id}`
+        }, signal)
+        sources.push(source)
+      } catch (error) {
+        failed.push({
+          url: candidate.normalizedUrl,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+
+    const sourceDedupeAfter = this.dedupeSources()
+    this.store.dedupe(this.store.getSettings().dedupe.defaultMode)
+    return {
+      searchedPages: curatedSourceSeeds.length,
+      candidateUrls: curatedSourceSeeds.length,
+      validUrls: validated.length,
+      added: sources.length,
+      skippedExisting: curatedSourceSeeds.length - candidates.length,
       failed,
       sources,
       sourceDedupe: {
@@ -684,6 +773,15 @@ export class SubscriptionService {
       // Fall through.
     }
     return 'GitHub discovered subscription'
+  }
+
+  private shortSourceLabel(url: string): string {
+    try {
+      const parsed = new URL(url)
+      return `${parsed.hostname}${parsed.pathname}`.slice(0, 120)
+    } catch {
+      return url.slice(0, 120)
+    }
   }
 
   private githubApiBaseUrl(): string {
